@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "SwipeClean",
+    "slug": "SwipeClean",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "bundleIdentifier": "com.swipeclean.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "SwipeClean needs access to your photo library so you can swipe through and clean up your photos.",
+        "NSPhotoLibraryAddUsageDescription": "SwipeClean needs permission to save photos to your library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_VISUAL_USER_SELECTED",
+        "ACCESS_MEDIA_LOCATION"
+      ],
+      "package": "com.swipeclean.app"
+    },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "translucent": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "SwipeClean needs access to your photos to let you swipe through and clean up your gallery.",
+          "savePhotosPermission": "SwipeClean needs permission to manage photos in your gallery.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      "expo-video",
+      "expo-secure-store",
+      "expo-localization"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e889e6d3-f0e6-4048-8c6f-9f5f044096fa"
+      }
+    }
+  }
+}

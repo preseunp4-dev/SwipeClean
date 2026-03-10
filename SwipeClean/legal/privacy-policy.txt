@@ -1,0 +1,39 @@
+Privacy Policy
+
+Last updated: March 4, 2026
+
+SwipeClean ("we", "our", or "the app") is a photo and video cleanup app that helps you organize and manage your device's photo library.
+
+Information We Collect
+
+SwipeClean does NOT collect, store, or transmit any personal data to external servers. All data stays on your device.
+
+The app accesses the following on your device:
+- Photo Library: To display your photos and videos for review, detect duplicates, and delete items you choose to trash. This access is requested through iOS system permissions and can be revoked at any time in your device Settings.
+
+Data Stored on Your Device
+
+The app stores the following data locally on your device to provide its functionality:
+- A list of photo IDs you have already reviewed (so you don't see the same photos twice)
+- Your keep/trash decisions for the current session
+- Usage statistics (number of photos reviewed, kept, trashed, and storage saved)
+- Dismissed duplicate groups
+- Daily swipe count
+
+This data is stored in the app's private sandbox on your device and is not accessible to other apps. It is automatically deleted if you uninstall the app.
+
+Third-Party Services
+
+SwipeClean uses Apple's In-App Purchase system for premium features. Purchases are processed entirely by Apple and are subject to Apple's privacy policy. We do not receive or store any payment information.
+
+Children's Privacy
+
+SwipeClean does not knowingly collect any personal information from children under 13 years of age.
+
+Changes to This Policy
+
+We may update this Privacy Policy from time to time. Any changes will be reflected by updating the "Last updated" date above.
+
+Contact
+
+If you have questions about this Privacy Policy, please contact us at preseunp2@gmail.com.

@@ -1,0 +1,50 @@
+Terms of Use
+
+Last updated: March 4, 2026
+
+Please read these Terms of Use ("Terms") carefully before using SwipeClean ("the app").
+
+By using the app, you agree to these Terms.
+
+1. Description of Service
+
+SwipeClean is a photo and video management app that allows you to review, organize, and delete photos and videos from your device's photo library.
+
+2. Your Responsibility
+
+You are solely responsible for any photos or videos you choose to delete using the app. Deleted items are moved to your device's "Recently Deleted" album where they can be recovered for up to 30 days, after which they are permanently removed by iOS. We are not responsible for any data loss resulting from your use of the app.
+
+3. In-App Purchases
+
+SwipeClean offers optional premium features through In-App Purchases:
+- Unlimited Swipes (one-time purchase): $4.99
+- Weekly Unlimited Swipes (auto-renewing subscription): $1.99/week
+
+For subscriptions:
+- Payment will be charged to your Apple ID account at confirmation of purchase.
+- Your subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.
+- Your account will be charged for renewal within 24 hours prior to the end of the current period at the same price.
+- You can manage and cancel your subscriptions by going to your App Store account settings after purchase.
+- No cancellation of the current subscription is allowed during the active subscription period.
+
+All purchases are processed by Apple and are subject to Apple's terms and conditions.
+
+4. Intellectual Property
+
+The app and its original content, features, and functionality are owned by SwipeClean and are protected by applicable copyright and trademark laws.
+
+5. Disclaimer
+
+The app is provided "as is" without warranty of any kind, express or implied. We do not guarantee that the app will be error-free or uninterrupted.
+
+6. Limitation of Liability
+
+To the maximum extent permitted by law, we shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the app.
+
+7. Changes to These Terms
+
+We reserve the right to modify these Terms at any time. Changes will be reflected by updating the "Last updated" date above. Continued use of the app after changes constitutes acceptance of the new Terms.
+
+8. Contact
+
+If you have questions about these Terms, please contact us at preseunp2@gmail.com.
