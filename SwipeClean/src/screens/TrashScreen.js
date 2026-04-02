@@ -9,10 +9,12 @@ import {
   Dimensions,
   Modal,
   Animated,
-  PanResponder,
   Easing,
+  Pressable,
 } from 'react-native';
+import { PanGestureHandler, State, NativeViewGestureHandler, LongPressGestureHandler } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
+import ZoomableImage from '../components/ZoomableImage';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
@@ -218,7 +220,10 @@ export default function TrashScreen() {
   const [selected, setSelected] = useState(new Set());
   const [previewIndex, setPreviewIndex] = useState(null);
   const [previewScrollEnabled, setPreviewScrollEnabled] = useState(true);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
   const previewListRef = useRef(null);
+  const nativeRef = useRef(null);
+  const panRef = useRef(null);
   const thumbRefs = useRef({});
   const previewOriginRef = useRef(null);
   const dismissY = useRef(new Animated.Value(0)).current;
@@ -226,58 +231,47 @@ export default function TrashScreen() {
   const dismissBg = useRef(new Animated.Value(1)).current;
   const openTx = useRef(new Animated.Value(0)).current;
   const openTy = useRef(new Animated.Value(0)).current;
-  const dismissingRef = useRef(false);
-  const dismissResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 6 && gs.dy > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) => gs.dy > 10 && gs.dy > Math.abs(gs.dx),
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-      onPanResponderGrant: () => {
-        dismissingRef.current = true;
-        setPreviewScrollEnabled(false);
-      },
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          dismissY.setValue(gs.dy);
-          const progress = Math.min(gs.dy / 300, 1);
-          dismissScale.setValue(1 - progress * 0.3);
-          dismissBg.setValue(1 - progress);
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        dismissingRef.current = false;
-        if (gs.dy > 120 || gs.vy > 0.5) {
-          Animated.timing(dismissY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start();
-          Animated.timing(dismissScale, { toValue: 0.5, duration: 250, useNativeDriver: true }).start();
-          Animated.timing(dismissBg, { toValue: 0, duration: 250, useNativeDriver: false }).start();
-          setTimeout(() => {
-            setPreviewIndex(null);
-            setPreviewScrollEnabled(true);
-            requestAnimationFrame(() => {
-              dismissY.setValue(0);
-              dismissScale.setValue(1);
-              dismissBg.setValue(1);
-              openTx.setValue(0);
-              openTy.setValue(0);
-            });
-          }, 260);
-        } else {
+  const dismissActiveRef = useRef(false);
+  const onDismissGesture = useCallback(({ nativeEvent }) => {
+    const { translationY, translationX } = nativeEvent;
+    // Only process dismiss if clearly vertical (not horizontal swipe)
+    if (translationY > 0 && translationY > Math.abs(translationX)) {
+      dismissActiveRef.current = true;
+      dismissY.setValue(translationY);
+      const progress = Math.min(translationY / 300, 1);
+      dismissScale.setValue(1 - progress * 0.3);
+      dismissBg.setValue(1 - progress);
+    }
+  }, []);
+
+  const onDismissStateChange = useCallback(({ nativeEvent }) => {
+    if (nativeEvent.oldState === State.ACTIVE) {
+      if (!dismissActiveRef.current) return;
+      dismissActiveRef.current = false;
+      const { translationY, velocityY } = nativeEvent;
+      if (translationY > 120 || velocityY > 500) {
+        Animated.timing(dismissY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start();
+        Animated.timing(dismissScale, { toValue: 0.5, duration: 250, useNativeDriver: true }).start();
+        Animated.timing(dismissBg, { toValue: 0, duration: 250, useNativeDriver: false }).start();
+        setTimeout(() => {
+          setPreviewIndex(null);
           setPreviewScrollEnabled(true);
-          Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
-          Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
-          Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        dismissingRef.current = false;
+          requestAnimationFrame(() => {
+            dismissY.setValue(0);
+            dismissScale.setValue(1);
+            dismissBg.setValue(1);
+            openTx.setValue(0);
+            openTy.setValue(0);
+          });
+        }, 260);
+      } else {
         setPreviewScrollEnabled(true);
         Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
         Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
         Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
-      },
-    })
-  ).current;
+      }
+    }
+  }, []);
 
   const openPreview = useCallback((index, origin) => {
     if (origin) {
@@ -324,6 +318,85 @@ export default function TrashScreen() {
   const exitSelecting = useCallback(() => {
     setSelecting(false);
     setSelected(new Set());
+  }, []);
+
+  // Drag-to-select
+  const flatListRef2 = useRef(null);
+  const scrollOffsetRef = useRef(0);
+  const gridOriginYRef = useRef(0);
+  const dragStartIndexRef = useRef(-1);
+  const dragSelectingRef = useRef(false);
+  const dragBaseSelected = useRef(new Set());
+  const longPressRef = useRef(null);
+  const dragPanRef = useRef(null);
+  const CELL_SIZE = THUMB_SIZE + 2;
+  const HEADER_H = insets.top + 93;
+
+  const getIndexFromPosition = useCallback((absX, absY) => {
+    const y = absY - gridOriginYRef.current + scrollOffsetRef.current - HEADER_H;
+    const x = absX;
+    if (y < 0 || x < 0) return -1;
+    const row = Math.floor(y / CELL_SIZE);
+    const col = Math.min(2, Math.floor(x / CELL_SIZE));
+    const idx = row * 3 + col;
+    return idx >= 0 && idx < trashed.length ? idx : -1;
+  }, [trashed.length, CELL_SIZE, HEADER_H]);
+
+  const updateDragSelection = useCallback((currentIndex) => {
+    if (dragStartIndexRef.current < 0 || currentIndex < 0) return;
+    const start = Math.min(dragStartIndexRef.current, currentIndex);
+    const end = Math.max(dragStartIndexRef.current, currentIndex);
+    const next = new Set(dragBaseSelected.current);
+    for (let i = start; i <= end; i++) {
+      next.add(trashed[i].id);
+    }
+    setSelected(next);
+  }, [trashed]);
+
+  const onDragLongPress = useCallback(({ nativeEvent }) => {
+    if (nativeEvent.state === State.ACTIVE) {
+      const idx = getIndexFromPosition(nativeEvent.absoluteX, nativeEvent.absoluteY);
+      if (idx >= 0) {
+        dragSelectingRef.current = true;
+        dragStartIndexRef.current = idx;
+        if (!selecting) {
+          setSelecting(true);
+          dragBaseSelected.current = new Set();
+        } else {
+          dragBaseSelected.current = new Set(selected);
+        }
+        const next = new Set(dragBaseSelected.current);
+        next.add(trashed[idx].id);
+        setSelected(next);
+      }
+    }
+  }, [getIndexFromPosition, selecting, selected, trashed]);
+
+  const onDragPan = useCallback(({ nativeEvent }) => {
+    if (!dragSelectingRef.current) {
+      // Start drag selection on first pan movement
+      const idx = getIndexFromPosition(nativeEvent.absoluteX, nativeEvent.absoluteY);
+      if (idx >= 0) {
+        dragSelectingRef.current = true;
+        dragStartIndexRef.current = idx;
+        dragBaseSelected.current = new Set(selected);
+        const next = new Set(dragBaseSelected.current);
+        next.add(trashed[idx].id);
+        setSelected(next);
+      }
+      return;
+    }
+    const idx = getIndexFromPosition(nativeEvent.absoluteX, nativeEvent.absoluteY);
+    if (idx >= 0) {
+      updateDragSelection(idx);
+    }
+  }, [getIndexFromPosition, updateDragSelection, selected, trashed]);
+
+  const onDragPanStateChange = useCallback(({ nativeEvent }) => {
+    if (nativeEvent.oldState === State.ACTIVE) {
+      dragSelectingRef.current = false;
+      dragStartIndexRef.current = -1;
+    }
   }, []);
 
   const handleDeleteAll = () => {
@@ -419,6 +492,15 @@ export default function TrashScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Grid */}
+      <PanGestureHandler
+        ref={dragPanRef}
+        onGestureEvent={onDragPan}
+        onHandlerStateChange={onDragPanStateChange}
+        activeOffsetX={[-5, 5]}
+        activeOffsetY={[-5, 5]}
+        enabled={selecting}
+      >
+      <View style={{ flex: 1 }} onLayout={(e) => { gridOriginYRef.current = e.nativeEvent.layout.y; }}>
       <FlatList
         data={trashed}
         keyExtractor={(item) => item.id}
@@ -431,6 +513,8 @@ export default function TrashScreen() {
         })}
         windowSize={7}
         maxToRenderPerBatch={15}
+        onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
         ListHeaderComponent={<View style={{ height: insets.top + 93 }} />}
         renderItem={({ item, index }) => {
           const isSelected = selected.has(item.id);
@@ -466,6 +550,8 @@ export default function TrashScreen() {
           );
         }}
       />
+      </View>
+      </PanGestureHandler>
 
       {/* Bottom buttons */}
       {selecting && selected.size > 0 ? (
@@ -477,7 +563,7 @@ export default function TrashScreen() {
             activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={18} color="#fff" />
-            <Text style={styles.selectionButtonText}>{t('trash.deleteSelected', { count: selected.size })}</Text>
+            <Text style={[styles.selectionButtonText, { color: '#fff' }]}>{t('trash.deleteSelected', { count: selected.size })}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.selectionButton, { backgroundColor: colors.green }]}
@@ -485,17 +571,17 @@ export default function TrashScreen() {
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-undo" size={18} color="#fff" />
-            <Text style={styles.selectionButtonText}>{t('trash.restoreSelected', { count: selected.size })}</Text>
+            <Text style={[styles.selectionButtonText, { color: '#fff' }]}>{t('trash.restoreSelected', { count: selected.size })}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <TouchableOpacity
-          style={[styles.deleteAllButton, { backgroundColor: colors.redBgLight, borderWidth: 1, borderColor: colors.red }, deleting && styles.deleteAllDisabled]}
+          style={[styles.deleteAllButton, { backgroundColor: colors.red }, deleting && styles.deleteAllDisabled]}
           onPress={handleDeleteAll}
           disabled={deleting}
           activeOpacity={0.7}
         >
-          <Text style={[styles.deleteAllText, { color: colors.red }]}>
+          <Text style={[styles.deleteAllText, { color: '#fff' }]}>
             {deleting ? t('trash.deleting') : t('trash.deleteAllButton', { count: trashed.length })}
           </Text>
         </TouchableOpacity>
@@ -536,7 +622,16 @@ export default function TrashScreen() {
       {previewIndex !== null && (
         <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,1)'] }) }]} />
+          <PanGestureHandler
+            ref={panRef}
+            onGestureEvent={onDismissGesture}
+            onHandlerStateChange={onDismissStateChange}
+            activeOffsetY={15}
+            simultaneousHandlers={nativeRef}
+            enabled={!previewZoomed}
+          >
           <Animated.View style={[styles.modalContainer, { backgroundColor: 'transparent', transform: [{ translateX: openTx }, { translateY: Animated.add(openTy, dismissY) }, { scale: dismissScale }], borderRadius: dismissScale.interpolate({ inputRange: [0.7, 1], outputRange: [16, 0], extrapolate: 'clamp' }) }]}>
+            <NativeViewGestureHandler ref={nativeRef} simultaneousHandlers={panRef}>
             <FlatList
               ref={previewListRef}
               data={trashed}
@@ -564,19 +659,21 @@ export default function TrashScreen() {
                   fitW = fitH * aspect;
                 }
                 return (
-                  <View style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]} {...dismissResponder.panHandlers}>
+                  <Pressable style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]} onPress={() => setPreviewIndex(null)}>
+                    <Pressable>
                     {item.mediaType === 'video' ? (
                       <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
                     ) : (
-                      <TouchableOpacity activeOpacity={1} style={{ width: fitW, height: fitH, borderRadius: 12, overflow: 'hidden' }}>
-                        <Image source={{ uri: item.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                      </TouchableOpacity>
+                      <ZoomableImage uri={item.uri} width={fitW} height={fitH} onZoomChange={(z) => { setPreviewZoomed(z); setPreviewScrollEnabled(!z); }} />
                     )}
-                  </View>
+                    </Pressable>
+                  </Pressable>
                 );
               }}
             />
+            </NativeViewGestureHandler>
           </Animated.View>
+          </PanGestureHandler>
           <Animated.View style={[styles.modalClose, { top: insets.top + 20, opacity: dismissBg }]} pointerEvents="auto">
             <TouchableOpacity activeOpacity={0.7} onPress={() => setPreviewIndex(null)}>
               <Ionicons name="close" size={28} color="#fff" />
@@ -718,7 +815,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderRadius: 14,
     gap: 6,
   },
@@ -743,7 +840,7 @@ const styles = StyleSheet.create({
   },
   deleteAllText: {
     color: '#fff',
-    fontSize: sw(17),
+    fontSize: sw(15),
     fontWeight: '700',
   },
   modalContainer: {

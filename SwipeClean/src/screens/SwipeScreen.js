@@ -6,7 +6,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useApp, DAILY_FREE_LIMIT } from '../context/AppContext';
 import { Image } from 'expo-image';
-import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard';
+import SwipeCard, { CARD_WIDTH, CARD_HEIGHT, MIN_CARD_BUTTON_GAP } from '../components/SwipeCard';
 import MilestoneOverlay from '../components/MilestoneOverlay';
 import { t } from '../i18n';
 import { useColors } from '../context/ColorContext';
@@ -18,12 +18,12 @@ import { sw } from '../utils/scale';
 const PAGE_SIZE = 200;
 
 const FILTERS = [
-  { key: 'all', label: 'swipe.filterAll' },
+  { key: 'oldest', label: 'swipe.filterOldest' },
+  { key: 'newest', label: 'swipe.filterNewest' },
+  { key: 'all', label: 'swipe.filterRandom' },
   { key: 'largest', label: 'swipe.filterLargest' },
   { key: 'videos', label: 'swipe.filterVideos' },
   { key: 'screenshots', label: 'swipe.filterScreenshots' },
-  { key: 'oldest', label: 'swipe.filterOldest' },
-  { key: 'newest', label: 'swipe.filterNewest' },
 ];
 
 // Fisher-Yates shuffle
@@ -51,7 +51,7 @@ export default function SwipeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [muted, setMuted] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('oldest');
   const [enterFrom, setEnterFrom] = useState(null);
   const filterCacheRef = useRef({});
   const fileSizeCache = useRef({});
@@ -189,7 +189,7 @@ export default function SwipeScreen() {
           batch = unseen.sort((a, b) => b.creationTime - a.creationTime).slice(0, PAGE_SIZE);
         } else if (filter === 'largest') {
           if (fileSizeModuleAvailable) {
-            // Native module: get ALL assets sorted by real file size via PHAssetResource (~instant)
+            // Native module: get ALL assets sorted by real file size via PHAssetResource
             const sorted = await getAllFileSizesSorted([1, 2]); // photos + videos
             // Build a lookup of id -> fileSize
             const sizeMap = {};
@@ -209,49 +209,56 @@ export default function SwipeScreen() {
             }
             batch = matched;
           } else {
-            // Fallback: proxy sort + fetch real sizes for top candidates only
-            // Apply cached sizes (without mutating originals)
+            // Fallback: use cached sizes if available, fetch only what's missing
             const unseenWithCache = unseen.map((a) => {
               if (!a.fileSize && fileSizeCache.current[a.id]) {
                 return { ...a, fileSize: fileSizeCache.current[a.id] };
               }
               return a;
             });
-            // Proxy score: resolution + duration strongly correlates with file size
-            const proxyScore = (a) =>
-              a.fileSize || ((a.width || 0) * (a.height || 0) + (a.duration || 0) * 1000000);
-            // Sort by proxy and take top candidates
-            const CANDIDATES = PAGE_SIZE * 2; // 400 candidates
-            const candidates = unseenWithCache.sort((a, b) => proxyScore(b) - proxyScore(a)).slice(0, CANDIDATES);
-            // Fetch real file sizes only for candidates without cached/known sizes
-            const toFetch = candidates.filter((a) => !a.fileSize);
-            if (toFetch.length > 0) {
-              filterLoadingRef.current = true;
-              const CHUNK = 20;
-              for (let i = 0; i < toFetch.length; i += CHUNK) {
-                if (myLoadId !== loadIdRef.current) {
-                  filterLoadingRef.current = false;
-                  saveFileSizeCache(fileSizeCache.current);
-                  return;
+
+            // Check how many unseen assets have cached sizes
+            const withSize = unseenWithCache.filter((a) => a.fileSize > 0);
+
+            if (withSize.length >= PAGE_SIZE) {
+              // Enough cached sizes — sort instantly, no fetching needed
+              batch = unseenWithCache
+                .sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0))
+                .slice(0, PAGE_SIZE);
+            } else {
+              // Not enough cached — fetch for top candidates
+              const proxyScore = (a) =>
+                a.fileSize || ((a.width || 0) * (a.height || 0) + (a.duration || 0) * 1000000);
+              const CANDIDATES = PAGE_SIZE * 2;
+              const candidates = unseenWithCache.sort((a, b) => proxyScore(b) - proxyScore(a)).slice(0, CANDIDATES);
+              const toFetch = candidates.filter((a) => !a.fileSize);
+              if (toFetch.length > 0) {
+                filterLoadingRef.current = true;
+                const CHUNK = 20;
+                for (let i = 0; i < toFetch.length; i += CHUNK) {
+                  if (myLoadId !== loadIdRef.current) {
+                    filterLoadingRef.current = false;
+                    saveFileSizeCache(fileSizeCache.current);
+                    return;
+                  }
+                  await Promise.all(toFetch.slice(i, i + CHUNK).map(async (a) => {
+                    try {
+                      const info = await MediaLibrary.getAssetInfoAsync(a.id);
+                      if (info.fileSize > 0) {
+                        fileSizeCache.current[a.id] = info.fileSize;
+                      }
+                    } catch {}
+                  }));
+                  setLoadProgress({ loaded: Math.min(Math.round(((i + CHUNK) / toFetch.length) * 100), 100), total: 100 });
                 }
-                await Promise.all(toFetch.slice(i, i + CHUNK).map(async (a) => {
-                  try {
-                    const info = await MediaLibrary.getAssetInfoAsync(a.id);
-                    if (info.fileSize > 0) {
-                      fileSizeCache.current[a.id] = info.fileSize;
-                    }
-                  } catch {}
-                }));
-                setLoadProgress({ loaded: Math.min(Math.round(((i + CHUNK) / toFetch.length) * 100), 100), total: 100 });
+                filterLoadingRef.current = false;
+                saveFileSizeCache(fileSizeCache.current);
               }
-              filterLoadingRef.current = false;
-              saveFileSizeCache(fileSizeCache.current);
+              batch = candidates
+                .map((a) => fileSizeCache.current[a.id] ? { ...a, fileSize: fileSizeCache.current[a.id] } : a)
+                .sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0))
+                .slice(0, PAGE_SIZE);
             }
-            // Re-sort candidates by real file size (now available from cache)
-            batch = candidates
-              .map((a) => fileSizeCache.current[a.id] ? { ...a, fileSize: fileSizeCache.current[a.id] } : a)
-              .sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0))
-              .slice(0, PAGE_SIZE);
           }
         } else {
           batch = shuffle(unseen).slice(0, PAGE_SIZE);
@@ -322,8 +329,7 @@ export default function SwipeScreen() {
 
   useEffect(() => { if (persistLoaded) loadAssets(activeFilter); }, [persistLoaded]);
 
-  // TODO: Remove this — temporary reset for testing
-  useEffect(() => { resetLimits(); }, []);
+  // Daily limit reset removed — was temporary for testing
 
   useEffect(() => {
     if (assets.length > 0 && currentIndex >= assets.length && hasMore && !loadingMore) {
@@ -342,7 +348,7 @@ export default function SwipeScreen() {
   }, []);
 
   useEffect(() => {
-    if (loading || !allAssetIdsRef.current || fileSizeModuleAvailable || !fileSizeCacheLoaded.current) return;
+    if (loading || !allAssetIdsRef.current || !fileSizeCacheLoaded.current) return;
     // Already running or completed — don't restart
     if (bgPreloadRef.current) return;
 
@@ -408,8 +414,8 @@ export default function SwipeScreen() {
   const handleFilterChange = (key) => {
     if (key === activeFilter) return;
 
-    // Save current filter state before switching (even if still loading)
-    if (assets.length > 0) {
+    // Save current filter state before switching — but only if not still loading
+    if (assets.length > 0 && !loading) {
       filterCacheRef.current[activeFilter] = { assets, currentIndex };
     }
 
@@ -872,12 +878,11 @@ const styles = StyleSheet.create({
   },
   cardWrapper: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    flex: 1,
+    maxHeight: CARD_HEIGHT,
   },
   cardShadow: {
-    position: 'absolute',
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
     elevation: 16,
     shadowColor: '#000',
@@ -895,7 +900,7 @@ const styles = StyleSheet.create({
   },
   buttonRowOuter: {
     alignItems: 'center',
-    paddingBottom: Math.round(SCREEN_HEIGHT * 0.012),
+    paddingBottom: Math.max(Math.round(SCREEN_HEIGHT * 0.012), 4),
     paddingTop: 4,
     width: '100%',
   },

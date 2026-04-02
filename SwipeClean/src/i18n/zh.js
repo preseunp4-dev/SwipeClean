@@ -53,6 +53,7 @@ export default {
     muted: '已静音',
     sound: '声音',
     filterAll: '全部',
+    filterRandom: '随机',
     filterScreenshots: '截图',
     filterVideos: '视频',
     filterOldest: '最早的',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: '错误',
     deleteErrorMessage: '部分项目无法删除，请重试。',
     deleteAll: '全部删除',
+    select: '选择',
+    selected: '已选择 %{count}',
+    deleteSelected: '删除 (%{count})',
+    restoreSelected: '恢复 (%{count})',
+    selectAll: '全选',
+    deselectAll: '取消全选',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean 需要访问你的相册才能扫描重复项。',
     errorTitle: '错误',
     errorMessage: '扫描过程中出了点问题。',
+    analyzingSize: '分析文件大小...',
+    tapToTrash: '点击删除',
+    duplicatesFound: '发现重复',
+    keepAll: '全部保留',
+    photosFound: '张照片',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: '我开发 SwipeClean 是因为受够了那些满屏广告、到处收费、暗藏自动续费的照片清理应用。你的手机里已经有成千上万张照片了——不应该为了删几张照片就花 $9.99/周。',
     aboutText2: '这个应用背后只有我一个人——一个只想做一款简单、诚实、真正有用的工具的开发者。如果 SwipeClean 帮你节省了时间或存储空间，可以请我喝杯咖啡。这真的能帮助我继续做下去。',
     buyMeCoffee: '请我喝杯咖啡',
+    darkMode: '深色模式',
+    lightMode: '浅色模式',
     colorblindMode: '色盲模式',
     howItWorks: '使用方法',
     privacyPolicy: '隐私政策',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} 张照片！',
+    goodStart: '好的开始！',
+    niceWork: '干得好！',
+    gettingStarted: '开始了！',
+    halfwayToHundred: '已到100的一半！',
+    almostThere: '快到了！',
     onARoll: '势不可挡！',
     keepItUp: '继续加油！',
     cleaningMachine: '清理达人！',

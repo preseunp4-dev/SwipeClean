@@ -53,6 +53,7 @@ export default {
     muted: 'ミュート',
     sound: 'サウンド',
     filterAll: 'すべて',
+    filterRandom: 'ランダム',
     filterScreenshots: 'スクリーンショット',
     filterVideos: '動画',
     filterOldest: '古い順',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'エラー',
     deleteErrorMessage: '一部のアイテムを削除できませんでした。もう一度お試しください。',
     deleteAll: 'すべて削除',
+    select: '選択',
+    selected: '%{count} 件選択',
+    deleteSelected: '削除 (%{count})',
+    restoreSelected: '復元 (%{count})',
+    selectAll: 'すべて',
+    deselectAll: 'なし',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeCleanが重複をスキャンするには、写真ライブラリへのアクセス許可が必要です。',
     errorTitle: 'エラー',
     errorMessage: 'スキャン中に問題が発生しました。',
+    analyzingSize: 'ファイルサイズを分析中...',
+    tapToTrash: 'タップして削除',
+    duplicatesFound: '重複が見つかりました',
+    keepAll: 'すべて保持',
+    photosFound: '枚',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: '広告だらけで、画面ごとにペイウォールがあって、こっそり課金させるような写真クリーナーアプリにうんざりして、SwipeCleanを作りました。スマホにはもう何千枚も写真があるのに、削除するだけで週$9.99も払う必要はないはずです。',
     aboutText2: 'このアプリは私一人で作っています。シンプルで正直な、本当に役立つツールが欲しかっただけです。もしSwipeCleanが時間や容量の節約に役立ったなら、コーヒーをおごっていただけると嬉しいです。本当に励みになります。',
     buyMeCoffee: 'コーヒーをおごる',
+    darkMode: 'ダークモード',
+    lightMode: 'ライトモード',
     colorblindMode: '色覚サポートモード',
     howItWorks: '使い方',
     privacyPolicy: 'プライバシーポリシー',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count}枚達成！',
+    goodStart: 'いいスタート！',
+    niceWork: 'いい調子！',
+    gettingStarted: '始まったよ！',
+    halfwayToHundred: '100まであと半分！',
+    almostThere: 'もうすぐ！',
     onARoll: '絶好調！',
     keepItUp: 'その調子！',
     cleaningMachine: 'お掃除マスター！',

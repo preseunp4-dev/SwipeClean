@@ -53,6 +53,7 @@ export default {
     muted: 'صامت',
     sound: 'الصوت',
     filterAll: 'الكل',
+    filterRandom: 'عشوائي',
     filterScreenshots: 'لقطات الشاشة',
     filterVideos: 'الفيديوهات',
     filterOldest: 'الأقدم',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'خطأ',
     deleteErrorMessage: 'تعذّر حذف بعض العناصر. يرجى المحاولة مرة أخرى.',
     deleteAll: 'حذف الكل',
+    select: 'تحديد',
+    selected: '%{count} محدد',
+    deleteSelected: 'حذف (%{count})',
+    restoreSelected: 'استعادة (%{count})',
+    selectAll: 'الكل',
+    deselectAll: 'لا شيء',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'يحتاج SwipeClean إلى صلاحية الوصول إلى مكتبة صورك لفحص المكررات.',
     errorTitle: 'خطأ',
     errorMessage: 'حدث خطأ أثناء الفحص.',
+    analyzingSize: 'تحليل أحجام الملفات...',
+    tapToTrash: 'انقر للحذف',
+    duplicatesFound: 'تم العثور على نسخ مكررة',
+    keepAll: 'الاحتفاظ بالكل',
+    photosFound: 'صور',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'بنيت SwipeClean لأنني سئمت من تطبيقات تنظيف الصور المليئة بالإعلانات والرسوم على كل شاشة والاشتراكات المخفية. هاتفك يحتوي بالفعل على آلاف الصور — لا ينبغي أن تدفع $9.99/أسبوع فقط لحذفها.',
     aboutText2: 'هذا التطبيق من صنعي وحدي — شخص أراد أداة بسيطة وصادقة تساعد فعلاً. إذا وفّر لك SwipeClean بعض الوقت أو المساحة، فكّر في دعمي بكوب قهوة. هذا يساعدني حقاً على الاستمرار.',
     buyMeCoffee: 'ادعمني بكوب قهوة',
+    darkMode: 'الوضع الداكن',
+    lightMode: 'الوضع الفاتح',
     colorblindMode: 'وضع عمى الألوان',
     howItWorks: 'كيف يعمل',
     privacyPolicy: 'سياسة الخصوصية',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} صورة!',
+    goodStart: 'بداية جيدة!',
+    niceWork: 'عمل رائع!',
+    gettingStarted: 'انطلقت!',
+    halfwayToHundred: 'نصف الطريق إلى 100!',
+    almostThere: 'اقتربت!',
     onARoll: 'أداء رائع!',
     keepItUp: 'استمر!',
     cleaningMachine: 'آلة تنظيف!',

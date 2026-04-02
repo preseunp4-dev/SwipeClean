@@ -53,6 +53,7 @@ export default {
     muted: 'Lydløs',
     sound: 'Lyd',
     filterAll: 'Alle',
+    filterRandom: 'Tilfældig',
     filterScreenshots: 'Skærmbilleder',
     filterVideos: 'Videoer',
     filterOldest: 'Ældste',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Fejl',
     deleteErrorMessage: 'Kunne ikke slette nogle elementer. Prøv igen.',
     deleteAll: 'Slet alle',
+    select: 'Vælg',
+    selected: '%{count} valgt',
+    deleteSelected: 'Slet (%{count})',
+    restoreSelected: 'Gendan (%{count})',
+    selectAll: 'Alle',
+    deselectAll: 'Ingen',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean har brug for adgang til dit fotobibliotek for at scanne for dubletter.',
     errorTitle: 'Fejl',
     errorMessage: 'Noget gik galt under scanningen.',
+    analyzingSize: 'Analyserer filstørrelser...',
+    tapToTrash: 'Tryk for at slette',
+    duplicatesFound: 'Duplikater fundet',
+    keepAll: 'Behold alle',
+    photosFound: 'fotos',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'Jeg byggede SwipeClean, fordi jeg var træt af fotorydder-apps fyldt med reklamer, betalingsvægge på hver skærm og snedige abonnementer. Din telefon har allerede tusindvis af fotos — du burde ikke betale 79 kr./uge bare for at slette dem.',
     aboutText2: 'Denne app er bare mig — én person der ville have et simpelt, ærligt værktøj der faktisk hjælper. Hvis SwipeClean sparede dig tid eller plads, så overvej at købe mig en kaffe. Det holder virkelig projektet i gang.',
     buyMeCoffee: 'Køb mig en kaffe',
+    darkMode: 'Mørk tilstand',
+    lightMode: 'Lys tilstand',
     colorblindMode: 'Farveblindtilstand',
     howItWorks: 'Sådan virker det',
     privacyPolicy: 'Privatlivspolitik',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} fotos!',
+    goodStart: 'God start!',
+    niceWork: 'Godt arbejde!',
+    gettingStarted: 'Godt i gang!',
+    halfwayToHundred: 'Halvvejs til 100!',
+    almostThere: 'Næsten!',
     onARoll: 'Du er godt i gang!',
     keepItUp: 'Bliv ved!',
     cleaningMachine: 'Ryddemaskine!',

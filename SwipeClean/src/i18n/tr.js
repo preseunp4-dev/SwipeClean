@@ -53,6 +53,7 @@ export default {
     muted: 'Sessiz',
     sound: 'Ses',
     filterAll: 'Tümü',
+    filterRandom: 'Rastgele',
     filterScreenshots: 'Ekran Görüntüleri',
     filterVideos: 'Videolar',
     filterOldest: 'En Eski',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Hata',
     deleteErrorMessage: 'Bazı öğeler silinemedi. Lütfen tekrar dene.',
     deleteAll: 'Tümünü Sil',
+    select: 'Seç',
+    selected: '%{count} seçili',
+    deleteSelected: 'Sil (%{count})',
+    restoreSelected: 'Geri yükle (%{count})',
+    selectAll: 'Tümü',
+    deselectAll: 'Hiçbiri',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean\'in kopyaları tarayabilmesi için fotoğraf kütüphanene erişim izni gerekiyor.',
     errorTitle: 'Hata',
     errorMessage: 'Tarama sırasında bir sorun oluştu.',
+    analyzingSize: 'Dosya boyutları analiz ediliyor...',
+    tapToTrash: 'Silmek için dokun',
+    duplicatesFound: 'Kopyalar bulundu',
+    keepAll: 'Tümünü sakla',
+    photosFound: 'fotoğraf',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'SwipeClean\'i geliştirdim çünkü reklam dolu, her ekranda ödeme duvarı olan ve gizli aboneliklerle dolu fotoğraf temizleme uygulamalarından bıkmıştım. Telefonunda zaten binlerce fotoğraf var — onları silmek için haftalık $9.99 ödemen gerekmiyor.',
     aboutText2: 'Bu uygulamanın arkasında sadece ben varım — basit, dürüst ve gerçekten işe yarayan bir araç yapmak isteyen bir kişi. SwipeClean sana zaman veya depolama alanı kazandırdıysa, bana bir kahve ısmarlayabilirsin. Bu gerçekten devam etmemi sağlıyor.',
     buyMeCoffee: 'Bana Bir Kahve Ismarla',
+    darkMode: 'Karanlık mod',
+    lightMode: 'Aydınlık mod',
     colorblindMode: 'Renk körlüğü modu',
     howItWorks: 'Nasıl çalışır',
     privacyPolicy: 'Gizlilik Politikası',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} Fotoğraf!',
+    goodStart: 'İyi başlangıç!',
+    niceWork: 'Güzel iş!',
+    gettingStarted: 'İyi gidiyorsun!',
+    halfwayToHundred: '100\'e yarı yol!',
+    almostThere: 'Neredeyse!',
     onARoll: 'Fırtına gibisin!',
     keepItUp: 'Böyle devam!',
     cleaningMachine: 'Temizlik makinesi!',

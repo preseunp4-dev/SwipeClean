@@ -12,6 +12,7 @@ const AppContext = createContext();
 
 const DAILY_FREE_LIMIT = 200;
 const STORAGE_KEY = 'swipeclean_limits';
+const KEYCHAIN_OPTS = { keychainService: 'com.pieterpreseun.swipeclean.limits' };
 const MAX_HISTORY = 50;
 
 function getTodayString() {
@@ -44,7 +45,7 @@ async function persistSwipes(count) {
     await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify({
       swipesToday: count,
       lastResetDate: getTodayString(),
-    }));
+    }), KEYCHAIN_OPTS);
   } catch (e) { console.warn('Failed to persist swipes:', e.message); }
 }
 
@@ -225,6 +226,14 @@ function reducer(state, action) {
       };
     }
 
+    case 'INCREMENT_SWIPES': {
+      const add = action.payload || 1;
+      const newCount = state.dailySwipes + add;
+      const limited = !state.isPro && newCount >= DAILY_FREE_LIMIT;
+      persistSwipes(newCount);
+      return { ...state, dailySwipes: newCount, dailyLimitReached: limited };
+    }
+
     case 'RESET_LIMITS': {
       persistSwipes(0);
       return { ...state, dailySwipes: 0, dailyLimitReached: false };
@@ -259,7 +268,7 @@ export function AppProvider({ children }) {
     (async () => {
       try {
         // Load daily limits from SecureStore
-        const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+        const raw = await SecureStore.getItemAsync(STORAGE_KEY, KEYCHAIN_OPTS);
         if (raw) {
           const data = JSON.parse(raw);
           const today = getTodayString();

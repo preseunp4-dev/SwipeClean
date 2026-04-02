@@ -53,6 +53,7 @@ export default {
     muted: 'Muto',
     sound: 'Audio',
     filterAll: 'Tutto',
+    filterRandom: 'Casuale',
     filterScreenshots: 'Screenshot',
     filterVideos: 'Video',
     filterOldest: 'Più vecchie',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Errore',
     deleteErrorMessage: 'Impossibile eliminare alcuni elementi. Riprova.',
     deleteAll: 'Elimina Tutto',
+    select: 'Seleziona',
+    selected: '%{count} selezionato/i',
+    deleteSelected: 'Elimina (%{count})',
+    restoreSelected: 'Ripristina (%{count})',
+    selectAll: 'Tutti',
+    deselectAll: 'Nessuno',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean ha bisogno di accedere alla tua libreria foto per cercare duplicati.',
     errorTitle: 'Errore',
     errorMessage: 'Qualcosa è andato storto durante la scansione.',
+    analyzingSize: 'Analisi dimensioni...',
+    tapToTrash: 'Tocca per eliminare',
+    duplicatesFound: 'Duplicati trovati',
+    keepAll: 'Tieni tutto',
+    photosFound: 'foto',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'Ho creato SwipeClean perché ero stufo delle app per pulire le foto piene di pubblicità, paywall su ogni schermata e abbonamenti ingannevoli. Il tuo telefono ha già migliaia di foto — non dovresti pagare $9.99/settimana solo per eliminarle.',
     aboutText2: 'Questa app sono solo io — una persona che voleva uno strumento semplice, onesto e davvero utile. Se SwipeClean ti ha fatto risparmiare tempo o spazio, considera di offrirmi un caffè. Mi aiuta davvero a continuare.',
     buyMeCoffee: 'Offrimi un Caffè',
+    darkMode: 'Modalità scura',
+    lightMode: 'Modalità chiara',
     colorblindMode: 'Modalità daltonici',
     howItWorks: 'Come funziona',
     privacyPolicy: 'Informativa sulla Privacy',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} Foto!',
+    goodStart: 'Buon inizio!',
+    niceWork: 'Bel lavoro!',
+    gettingStarted: 'Ottimo inizio!',
+    halfwayToHundred: 'A metà strada!',
+    almostThere: 'Quasi!',
     onARoll: 'Sei in forma!',
     keepItUp: 'Continua così!',
     cleaningMachine: 'Macchina da pulizia!',

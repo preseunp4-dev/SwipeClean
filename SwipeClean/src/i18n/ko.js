@@ -53,6 +53,7 @@ export default {
     muted: '음소거',
     sound: '소리',
     filterAll: '전체',
+    filterRandom: '무작위',
     filterScreenshots: '스크린샷',
     filterVideos: '동영상',
     filterOldest: '오래된 순',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: '오류',
     deleteErrorMessage: '일부 항목을 삭제할 수 없었습니다. 다시 시도해 주세요.',
     deleteAll: '전체 삭제',
+    select: '선택',
+    selected: '%{count}개 선택됨',
+    deleteSelected: '삭제 (%{count})',
+    restoreSelected: '복원 (%{count})',
+    selectAll: '전체',
+    deselectAll: '없음',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean이 중복 사진을 스캔하려면 사진 라이브러리 접근 권한이 필요합니다.',
     errorTitle: '오류',
     errorMessage: '스캔 중 문제가 발생했습니다.',
+    analyzingSize: '파일 크기 분석 중...',
+    tapToTrash: '탭하여 삭제',
+    duplicatesFound: '중복 발견',
+    keepAll: '모두 유지',
+    photosFound: '장',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: '광고 범벅에 화면마다 유료 결제벽, 몰래 빠져나가는 구독료가 가득한 사진 정리 앱에 질려서 SwipeClean을 만들었습니다. 이미 수천 장의 사진이 있는데, 삭제하려고 매주 $9.99를 낼 필요는 없잖아요.',
     aboutText2: '이 앱은 저 혼자 만들었어요. 단순하고 정직하며 진짜 도움이 되는 도구를 원했을 뿐이에요. SwipeClean이 시간이나 저장 공간을 아끼는 데 도움이 되었다면, 커피 한 잔 사주시는 건 어떨까요. 정말 큰 힘이 됩니다.',
     buyMeCoffee: '커피 한 잔 사주기',
+    darkMode: '다크 모드',
+    lightMode: '라이트 모드',
     colorblindMode: '색각 이상 모드',
     howItWorks: '사용 방법',
     privacyPolicy: '개인정보 처리방침',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count}장 달성!',
+    goodStart: '좋은 시작!',
+    niceWork: '잘하고 있어요!',
+    gettingStarted: '시작이 좋아요!',
+    halfwayToHundred: '100까지 절반!',
+    almostThere: '거의 다 왔어요!',
     onARoll: '날아가는 중!',
     keepItUp: '계속 이 기세로!',
     cleaningMachine: '정리의 달인!',

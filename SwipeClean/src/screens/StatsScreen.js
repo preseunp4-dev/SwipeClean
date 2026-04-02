@@ -75,28 +75,6 @@ export default function StatsScreen() {
 
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-          {/* Progress bar */}
-          <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>{t('stats.ratio')}</Text>
-          <View style={[styles.progressBarBg, { backgroundColor: theme.border }]}>
-            <View
-              style={[
-                styles.progressBarKeep,
-                { flex: totalKept || 0.01, backgroundColor: colors.green },
-              ]}
-            />
-            <View
-              style={[
-                styles.progressBarTrash,
-                { flex: totalTrashed || 0.01, backgroundColor: colors.red },
-              ]}
-            />
-          </View>
-          <Text style={[styles.percentText, { color: theme.textSecondary }]}>
-            {t('stats.ratioText', { percent: trashPercent })}
-          </Text>
-
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>{t('stats.storage')}</Text>
           <View style={styles.row}>
             <View style={styles.storageBox}>
@@ -121,6 +99,28 @@ export default function StatsScreen() {
               <Text style={[styles.spaceSavedLabel, { color: theme.textSecondary }]}>{t('stats.spaceSaved')}</Text>
             </View>
           </View>
+
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+          {/* Progress bar */}
+          <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>{t('stats.ratio')}</Text>
+          <View style={[styles.progressBarBg, { backgroundColor: theme.border }]}>
+            <View
+              style={[
+                styles.progressBarTrash,
+                { flex: totalTrashed || 0.01, backgroundColor: colors.red },
+              ]}
+            />
+            <View
+              style={[
+                styles.progressBarKeep,
+                { flex: totalKept || 0.01, backgroundColor: colors.green },
+              ]}
+            />
+          </View>
+          <Text style={[styles.percentText, { color: theme.textSecondary }]}>
+            {t('stats.ratioText', { percent: trashPercent })}
+          </Text>
         </View>
 
         {/* Daily swipes card */}
@@ -213,7 +213,7 @@ export default function StatsScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name={isDark ? 'moon-outline' : 'sunny'} size={18} color={isDark ? theme.textSecondary : '#5856D6'} style={{ marginRight: 8 }} />
-          <Text style={[styles.testOnboardingText, { color: isDark ? theme.textSecondary : '#5856D6' }]}>{isDark ? 'Dark Mode' : 'Light Mode'}</Text>
+          <Text style={[styles.testOnboardingText, { color: isDark ? theme.textSecondary : '#5856D6' }]}>{isDark ? t('stats.lightMode') : t('stats.darkMode')}</Text>
         </TouchableOpacity>
 
         <View style={styles.legalFooter}>

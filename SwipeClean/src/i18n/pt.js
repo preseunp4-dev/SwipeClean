@@ -53,6 +53,7 @@ export default {
     muted: 'Mudo',
     sound: 'Som',
     filterAll: 'Todas',
+    filterRandom: 'Aleatório',
     filterScreenshots: 'Capturas de Tela',
     filterVideos: 'Vídeos',
     filterOldest: 'Mais Antigas',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Erro',
     deleteErrorMessage: 'Não foi possível apagar alguns itens. Tente novamente.',
     deleteAll: 'Apagar Tudo',
+    select: 'Selecionar',
+    selected: '%{count} selecionado(s)',
+    deleteSelected: 'Excluir (%{count})',
+    restoreSelected: 'Restaurar (%{count})',
+    selectAll: 'Tudo',
+    deselectAll: 'Nenhum',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'O SwipeClean precisa de acesso à sua biblioteca de fotos para buscar duplicatas.',
     errorTitle: 'Erro',
     errorMessage: 'Algo deu errado durante o escaneamento.',
+    analyzingSize: 'Analisando tamanhos...',
+    tapToTrash: 'Toque para excluir',
+    duplicatesFound: 'Duplicatas encontradas',
+    keepAll: 'Manter tudo',
+    photosFound: 'fotos',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'Eu criei o SwipeClean porque estava cansado de apps de limpeza de fotos cheios de anúncios, paywalls em cada tela e assinaturas traiçoeiras. Seu celular já tem milhares de fotos — você não deveria precisar pagar $9.99/semana só para apagá-las.',
     aboutText2: 'Este app sou só eu — uma pessoa que queria uma ferramenta simples, honesta e que realmente ajuda. Se o SwipeClean te economizou tempo ou espaço, considere me pagar um café. Isso realmente me ajuda a continuar.',
     buyMeCoffee: 'Me Pague um Café',
+    darkMode: 'Modo escuro',
+    lightMode: 'Modo claro',
     colorblindMode: 'Modo daltônico',
     howItWorks: 'Como funciona',
     privacyPolicy: 'Política de Privacidade',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} Fotos!',
+    goodStart: 'Bom começo!',
+    niceWork: 'Bom trabalho!',
+    gettingStarted: 'Começando bem!',
+    halfwayToHundred: 'Metade de 100!',
+    almostThere: 'Quase lá!',
     onARoll: 'Tá voando!',
     keepItUp: 'Continue assim!',
     cleaningMachine: 'Máquina de limpeza!',

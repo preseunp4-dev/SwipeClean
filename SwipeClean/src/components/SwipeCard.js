@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
-import { Animated, Dimensions, Easing, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, Easing, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -17,7 +17,12 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCALE_WIDTH = Math.min(SCREEN_WIDTH, 430);
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
 export const CARD_WIDTH = Math.min(SCREEN_WIDTH - sw(40), 500);
-export const CARD_HEIGHT = Math.min(SCALE_WIDTH * 1.3, SCREEN_HEIGHT * 0.668);
+// Cap card height so there's always ≥160pt left for filter bar, buttons, tab bar & safe areas.
+// On iPhone 13 (844pt): min(507, 664) = 507 — unchanged.
+// On smaller screens the card shrinks to guarantee button space.
+export const CARD_HEIGHT = Math.min(SCALE_WIDTH * 1.3, SCREEN_HEIGHT - 180);
+// Minimum gap between card bottom and button row
+export const MIN_CARD_BUTTON_GAP = 16;
 const EXIT_DURATION = 200;
 
 function VideoCardContent({ uri, muted, paused, onPlayerReady }) {
@@ -53,12 +58,19 @@ function VideoCardContent({ uri, muted, paused, onPlayerReady }) {
   }, [player]);
 
   return (
-    <VideoView
-      player={player}
-      style={[styles.image, !visible && { opacity: 0 }]}
-      contentFit="cover"
-      nativeControls={false}
-    />
+    <>
+      <VideoView
+        player={player}
+        style={[styles.image, !visible && { opacity: 0 }]}
+        contentFit="cover"
+        nativeControls={false}
+      />
+      {!visible && (
+        <View style={styles.videoLoading}>
+          <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+        </View>
+      )}
+    </>
   );
 }
 
@@ -441,14 +453,14 @@ const SwipeCard = React.memo(forwardRef(({ asset, onSwipeLeft, onSwipeRight, isP
       {/* Mute toggle — inside card, above info pill */}
       {isVideo && !isPreview && onToggleMute && (
         <TouchableOpacity onPress={onToggleMute} activeOpacity={0.6} style={styles.muteBtn}>
-          <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={14} color="rgba(255,255,255,0.85)" />
+          <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="rgba(255,255,255,0.85)" />
         </TouchableOpacity>
       )}
 
       {/* Info text */}
       <View style={styles.infoPill}>
         <Text style={styles.infoText} numberOfLines={1}>
-          {formatDate(asset.creationTime)}  ·  {formatBytes(fileSize)}
+          {formatBytes(fileSize)}  ·  {formatDate(asset.creationTime)}
           {asset.duration ? `  ·  ${formatDuration(asset.duration)}` : ''}
         </Text>
       </View>
@@ -480,11 +492,9 @@ export default SwipeCard;
 
 const styles = StyleSheet.create({
   card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
     backgroundColor: '#1c1c1e',
-    position: 'absolute',
   },
   cardInner: {
     flex: 1,
@@ -507,6 +517,11 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: sw(13),
     marginTop: 8,
+  },
+  videoLoading: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -574,16 +589,16 @@ const styles = StyleSheet.create({
   },
   muteBtn: {
     position: 'absolute',
-    bottom: 32,
+    bottom: 40,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   infoPill: {
     position: 'absolute',
-    bottom: 8,
+    bottom: 12,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: 12,

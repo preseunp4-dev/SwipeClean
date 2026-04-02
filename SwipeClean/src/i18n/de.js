@@ -53,6 +53,7 @@ export default {
     muted: 'Stumm',
     sound: 'Ton',
     filterAll: 'Alle',
+    filterRandom: 'Zufällig',
     filterScreenshots: 'Screenshots',
     filterVideos: 'Videos',
     filterOldest: '\u00c4lteste',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Fehler',
     deleteErrorMessage: 'Einige Elemente konnten nicht gel\u00f6scht werden. Bitte versuche es erneut.',
     deleteAll: 'Alle l\u00f6schen',
+    select: 'Auswählen',
+    selected: '%{count} ausgewählt',
+    deleteSelected: 'Löschen (%{count})',
+    restoreSelected: 'Wiederherstellen (%{count})',
+    selectAll: 'Alle',
+    deselectAll: 'Keine',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean ben\u00f6tigt Zugriff auf deine Fotobibliothek, um nach Duplikaten zu scannen.',
     errorTitle: 'Fehler',
     errorMessage: 'Beim Scannen ist etwas schiefgelaufen.',
+    analyzingSize: 'Dateigrößen analysieren...',
+    tapToTrash: 'Tippen zum Löschen',
+    duplicatesFound: 'Duplikate gefunden',
+    keepAll: 'Alle behalten',
+    photosFound: 'Fotos',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'Ich habe SwipeClean entwickelt, weil ich es satt hatte, dass Fotoreinigungs-Apps voller Werbung stecken, hinter jeder Ecke eine Bezahlschranke lauert und heimliche Abos aufgedr\u00e4ngt werden. Dein Handy hat bereits tausende Fotos \u2014 du solltest nicht $9.99/Woche zahlen m\u00fcssen, nur um sie zu l\u00f6schen.',
     aboutText2: 'Hinter dieser App stecke nur ich \u2014 eine einzelne Person, die ein einfaches, ehrliches Tool wollte, das wirklich hilft. Wenn SwipeClean dir Zeit oder Speicherplatz gespart hat, w\u00fcrde ich mich \u00fcber einen Kaffee freuen. Das h\u00e4lt dieses Projekt wirklich am Laufen.',
     buyMeCoffee: 'Kauf mir einen Kaffee',
+    darkMode: 'Dunkelmodus',
+    lightMode: 'Hellmodus',
     colorblindMode: 'Farbenblindmodus',
     howItWorks: 'So funktioniert es',
     privacyPolicy: 'Datenschutzrichtlinie',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} Fotos!',
+    goodStart: 'Guter Start!',
+    niceWork: 'Gute Arbeit!',
+    gettingStarted: 'Gut angefangen!',
+    halfwayToHundred: 'Halbzeit bis 100!',
+    almostThere: 'Fast geschafft!',
     onARoll: 'Du bist voll dabei!',
     keepItUp: 'Weiter so!',
     cleaningMachine: 'Aufr\u00e4ummaschine!',

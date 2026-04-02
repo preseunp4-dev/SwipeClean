@@ -16,9 +16,10 @@ import {
   UIManager,
   Modal,
   Linking,
-  PanResponder,
 } from 'react-native';
+import { PanGestureHandler, State, NativeViewGestureHandler } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
+import ZoomableImage from '../components/ZoomableImage';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import { useApp } from '../context/AppContext';
@@ -28,6 +29,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '../i18n';
 import { sw, sh } from '../utils/scale';
+import { analyzePhotos, isAvailable as photoQualityAvailable } from '../../modules/photo-quality-module';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -63,6 +65,7 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
   const flatListRef = useRef(null);
   const closingRef = useRef(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [zoomed, setZoomed] = useState(false);
   const count = group.assets.length;
 
   // Calculate origin-based start values
@@ -113,49 +116,48 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
     onClose();
   }, [onClose]);
 
-  const dismissResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 6 && gs.dy > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) => gs.dy > 10 && gs.dy > Math.abs(gs.dx),
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-      onPanResponderGrant: () => {
-        setScrollEnabled(false);
-      },
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          dismissY.setValue(gs.dy);
-          const progress = Math.min(gs.dy / 300, 1);
-          dismissScale.setValue(1 - progress * 0.3);
-          dismissBg.setValue(1 - progress);
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 120 || gs.vy > 0.5) {
-          Animated.timing(dismissY, { toValue: SCREEN_H, duration: 250, useNativeDriver: true }).start();
-          Animated.timing(dismissScale, { toValue: 0.5, duration: 250, useNativeDriver: true }).start();
-          Animated.timing(dismissBg, { toValue: 0, duration: 250, useNativeDriver: false }).start();
-          setTimeout(() => {
-            onClose();
-          }, 260);
-        } else {
-          setScrollEnabled(true);
-          Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
-          Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
-          Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
+  const nativeRef = useRef(null);
+  const panRef = useRef(null);
+  const dismissActiveRef = useRef(false);
+  const onDismissGesture = useCallback(({ nativeEvent }) => {
+    const { translationY, translationX } = nativeEvent;
+    if (translationY > 0 && translationY > Math.abs(translationX)) {
+      dismissActiveRef.current = true;
+      dismissY.setValue(translationY);
+      const progress = Math.min(translationY / 300, 1);
+      dismissScale.setValue(1 - progress * 0.3);
+      dismissBg.setValue(1 - progress);
+    }
+  }, []);
+
+  const onDismissStateChange = useCallback(({ nativeEvent }) => {
+    if (nativeEvent.oldState === State.ACTIVE) {
+      if (!dismissActiveRef.current) return;
+      dismissActiveRef.current = false;
+      const { translationY, velocityY } = nativeEvent;
+      if (translationY > 120 || velocityY > 500) {
+        Animated.timing(dismissY, { toValue: SCREEN_H, duration: 250, useNativeDriver: true }).start();
+        Animated.timing(dismissScale, { toValue: 0.5, duration: 250, useNativeDriver: true }).start();
+        Animated.timing(dismissBg, { toValue: 0, duration: 250, useNativeDriver: false }).start();
+        setTimeout(() => {
+          onClose();
+        }, 260);
+      } else {
         setScrollEnabled(true);
         Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
         Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
         Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
-      },
-    })
-  ).current;
+      }
+    }
+  }, [onClose]);
 
   const galPadTop = insets.top + 58;
   const galPadBottom = insets.bottom + 41;
+
+  const handleZoomChange = useCallback((isZoomed) => {
+    setZoomed(isZoomed);
+    setScrollEnabled(!isZoomed);
+  }, []);
 
   const renderPage = useCallback(({ item: asset }) => {
     const availW = SCREEN_W - 16;
@@ -168,13 +170,13 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
       fitW = fitH * aspect;
     }
     return (
-      <View style={[styles.galleryPage, { paddingTop: galPadTop, paddingBottom: galPadBottom }]} {...dismissResponder.panHandlers}>
-        <TouchableOpacity activeOpacity={1} style={{ width: fitW, height: fitH, borderRadius: 12, overflow: 'hidden' }}>
-          <Image source={{ uri: asset.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-        </TouchableOpacity>
-      </View>
+      <Pressable style={[styles.galleryPage, { paddingTop: galPadTop, paddingBottom: galPadBottom }]} onPress={handleClose}>
+        <Pressable>
+          <ZoomableImage uri={asset.uri} width={fitW} height={fitH} onZoomChange={handleZoomChange} />
+        </Pressable>
+      </Pressable>
     );
-  }, []);
+  }, [handleZoomChange, handleClose]);
 
   // Pre-compute dot interpolations once (stable across renders)
   const dotAnims = useRef(
@@ -195,9 +197,18 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
   return (
     <>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.95)'] }) }]} />
+      <PanGestureHandler
+        ref={panRef}
+        onGestureEvent={onDismissGesture}
+        onHandlerStateChange={onDismissStateChange}
+        activeOffsetY={15}
+        simultaneousHandlers={nativeRef}
+        enabled={!zoomed}
+      >
       <Animated.View
         style={[styles.modalOverlay, { backgroundColor: 'transparent', transform: [{ translateX: openTx }, { translateY: Animated.add(openTy, dismissY) }, { scale: dismissScale }] }]}
       >
+        <NativeViewGestureHandler ref={nativeRef} simultaneousHandlers={panRef}>
         <Animated.FlatList
           ref={flatListRef}
           data={group.assets}
@@ -218,8 +229,10 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
           scrollEventThrottle={16}
           renderItem={renderPage}
         />
+        </NativeViewGestureHandler>
 
       </Animated.View>
+      </PanGestureHandler>
 
       <Animated.View style={[styles.dotsContainer, { bottom: insets.bottom + 22, opacity: dismissBg }]}>
         {dotAnims.map((anim, i) => (
@@ -244,7 +257,7 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
 }
 
 export default function DuplicatesScreen() {
-  const { trashMultiple, markSeen } = useApp();
+  const { trashMultiple, markSeen, dispatch } = useApp();
   const { colors, theme } = useColors();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState('idle');
@@ -254,10 +267,12 @@ export default function DuplicatesScreen() {
   const [expanded, setExpanded] = useState(null); // { groupId, assetId, origin }
   const thumbRefs = useRef({});
 
-  // Load dismissed groups on mount
+  // Load dismissed groups and auto-scan on mount
   useEffect(() => {
     loadDismissedGroups().then(setDismissedKeys);
   }, []);
+
+  const hasScannedRef = useRef(false);
 
   const scan = useCallback(async () => {
     setPhase('scanning');
@@ -378,12 +393,63 @@ export default function DuplicatesScreen() {
       setDismissedKeys(currentDismissed);
       const visibleGroups = foundGroups.filter((g) => !currentDismissed.has(groupKey(g.assets)));
 
+      // Analyze photo quality and auto-suggest best photo per group
+      if (photoQualityAvailable && visibleGroups.length > 0) {
+        setProgress({ loaded: 0, total: visibleGroups.length });
+        for (let gi = 0; gi < visibleGroups.length; gi++) {
+          const group = visibleGroups[gi];
+          try {
+            const ids = group.assets.map((a) => a.id);
+            const scores = await analyzePhotos(ids);
+            const scoreMap = {};
+            for (const s of scores) scoreMap[s.id] = s.compositeScore;
+
+            // Find best photo (highest composite score)
+            let bestId = group.assets[0].id;
+            let bestScore = -1;
+            for (const asset of group.assets) {
+              const score = scoreMap[asset.id] || 0;
+              if (score > bestScore) {
+                bestScore = score;
+                bestId = asset.id;
+              }
+            }
+
+            // Move best photo to first position
+            const sorted = [
+              ...group.assets.filter((a) => a.id === bestId),
+              ...group.assets.filter((a) => a.id !== bestId),
+            ];
+            group.assets = sorted;
+            group.bestId = bestId;
+
+            // Pre-select all others as trash
+            const trashIds = new Set();
+            for (const asset of group.assets) {
+              if (asset.id !== bestId) trashIds.add(asset.id);
+            }
+            group.trashIds = trashIds;
+          } catch (e) {
+            // Quality analysis failed for this group — skip
+          }
+          setProgress({ loaded: gi + 1, total: visibleGroups.length });
+        }
+      }
+
       setGroups(visibleGroups);
       setPhase('done');
     } catch (err) {
       console.warn('Scan error:', err);
       Alert.alert(t('common.error'), t('duplicates.errorMessage'));
       setPhase('idle');
+    }
+  }, []);
+
+  // Auto-scan on mount
+  useEffect(() => {
+    if (!hasScannedRef.current) {
+      hasScannedRef.current = true;
+      scan();
     }
   }, []);
 
@@ -428,12 +494,14 @@ export default function DuplicatesScreen() {
     // Mark kept ones as seen so they don't show in swipe
     const keptIds = group.assets.filter((a) => !trashIds.has(a.id)).map((a) => a.id);
     if (keptIds.length > 0) markSeen(keptIds);
+    dispatch({ type: 'INCREMENT_SWIPES', payload: 1 });
     dismissGroup(group.id);
   };
 
   const handleKeepAll = (group) => {
     // Mark all as seen and dismiss
     markSeen(group.assets.map((a) => a.id));
+    dispatch({ type: 'INCREMENT_SWIPES', payload: 1 });
     dismissGroup(group.id);
   };
 
@@ -507,39 +575,41 @@ export default function DuplicatesScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbRow}>
                 {group.assets.map((asset) => {
                   const isTrashed = trashIds.has(asset.id);
+                  const isBest = group.bestId === asset.id;
                   return (
                     <TouchableOpacity
                       key={asset.id}
                       ref={(ref) => { if (ref) thumbRefs.current[asset.id] = ref; }}
-                      onPress={() => toggleTrash(group.id, asset.id)}
+                      onPress={() => {
+                        const ref = thumbRefs.current[asset.id];
+                        if (ref) {
+                          ref.measureInWindow((x, y, w, h) => {
+                            setExpanded({ groupId: group.id, assetId: asset.id, origin: { x, y, w, h } });
+                          });
+                        } else {
+                          setExpanded({ groupId: group.id, assetId: asset.id });
+                        }
+                      }}
                       activeOpacity={0.7}
                       style={styles.thumbWrapper}
                     >
                       <Image
                         source={{ uri: asset.uri }}
-                        style={[styles.thumb, isTrashed && { borderColor: colors.red }]}
+                        style={[styles.thumb, isTrashed && { borderColor: colors.red }, isBest && styles.bestThumb]}
                         contentFit="cover"
                       />
-                      {isTrashed && (
-                        <View style={[styles.badge, { backgroundColor: colors.redBgStrong }]}>
-                          <Ionicons name="trash" size={12} color="#fff" />
+                      {isBest && (
+                        <View style={styles.bestBadge}>
+                          <Ionicons name="star" size={10} color="#000" />
+                          <Text style={styles.bestBadgeText}>BEST</Text>
                         </View>
                       )}
                       <Pressable
-                        style={styles.expandButton}
-                        onPress={() => {
-                          const ref = thumbRefs.current[asset.id];
-                          if (ref) {
-                            ref.measureInWindow((x, y, w, h) => {
-                              setExpanded({ groupId: group.id, assetId: asset.id, origin: { x, y, w, h } });
-                            });
-                          } else {
-                            setExpanded({ groupId: group.id, assetId: asset.id });
-                          }
-                        }}
+                        style={[styles.selectCircle, isTrashed && { backgroundColor: colors.red, borderColor: colors.red }]}
+                        onPress={() => toggleTrash(group.id, asset.id)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Ionicons name="expand" size={16} color="#fff" />
+                        {isTrashed && <Ionicons name="checkmark" size={14} color="#fff" />}
                       </Pressable>
                       {asset.fileSize > 0 && (
                         <Text style={[styles.thumbSize, { color: theme.textSecondary }]}>{formatBytes(asset.fileSize)}</Text>
@@ -599,11 +669,29 @@ export default function DuplicatesScreen() {
         style={[styles.header, { paddingTop: insets.top + 13 }]}
         pointerEvents="box-none"
       >
-        <View>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>{t('duplicates.headerTitle')}</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.text }]}>
-            {totalPhotos} {t('duplicates.photosFound')}
-          </Text>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>{t('duplicates.headerTitle')}</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.text }]}>
+              {totalPhotos} {t('duplicates.photosFound')}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                t('duplicates.rescanTitle'),
+                t('duplicates.rescanMessage'),
+                [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { text: t('duplicates.scanAgain'), onPress: () => { setGroups([]); setDismissedKeys(new Set()); saveDismissedGroups(new Set()); scan(); } },
+                ]
+              );
+            }}
+            activeOpacity={0.7}
+            style={styles.rescanHeaderButton}
+          >
+            <Ionicons name="refresh" size={22} color="#5856D6" />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
     </View>
@@ -654,6 +742,9 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: sw(14),
     marginTop: 8,
+  },
+  rescanHeaderButton: {
+    padding: 6,
   },
   rescanButton: {
     flexDirection: 'row',
@@ -764,6 +855,27 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  bestThumb: {
+    borderColor: '#FFD60A',
+    borderWidth: 2,
+  },
+  bestBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFD60A',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 2,
+  },
+  bestBadgeText: {
+    color: '#000',
+    fontSize: 9,
+    fontWeight: '800',
+  },
   badge: {
     position: 'absolute',
     top: 4,
@@ -789,13 +901,26 @@ const styles = StyleSheet.create({
     fontSize: sw(10),
     marginTop: 1,
   },
+  selectCircle: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   expandButton: {
     position: 'absolute',
     bottom: 6,
     left: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -893,6 +1018,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
+    width: '50%',
     marginTop: 12,
     paddingVertical: 10,
     borderRadius: 10,

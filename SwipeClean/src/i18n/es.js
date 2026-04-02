@@ -53,6 +53,7 @@ export default {
     muted: 'Silenciado',
     sound: 'Sonido',
     filterAll: 'Todo',
+    filterRandom: 'Aleatorio',
     filterScreenshots: 'Capturas de pantalla',
     filterVideos: 'V\u00eddeos',
     filterOldest: 'M\u00e1s antiguas',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Error',
     deleteErrorMessage: 'No se pudieron eliminar algunos elementos. Por favor, int\u00e9ntalo de nuevo.',
     deleteAll: 'Eliminar todo',
+    select: 'Seleccionar',
+    selected: '%{count} seleccionado(s)',
+    deleteSelected: 'Eliminar (%{count})',
+    restoreSelected: 'Restaurar (%{count})',
+    selectAll: 'Todo',
+    deselectAll: 'Ninguno',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean necesita acceso a tu fototeca para buscar duplicados.',
     errorTitle: 'Error',
     errorMessage: 'Algo sali\u00f3 mal durante el escaneo.',
+    analyzingSize: 'Analizando tamaños...',
+    tapToTrash: 'Toca para eliminar',
+    duplicatesFound: 'Duplicados encontrados',
+    keepAll: 'Mantener todo',
+    photosFound: 'fotos',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'Cre\u00e9 SwipeClean porque estaba harto de las apps de limpieza de fotos llenas de anuncios, con muros de pago en cada pantalla y suscripciones enga\u00f1osas. Tu tel\u00e9fono ya tiene miles de fotos \u2014 no deber\u00edas tener que pagar $9.99/semana solo para borrarlas.',
     aboutText2: 'Esta app soy solo yo \u2014 una persona que quer\u00eda una herramienta sencilla y honesta que realmente ayude. Si SwipeClean te ahorr\u00f3 tiempo o espacio, consid\u00e9rame un caf\u00e9. De verdad ayuda a mantener este proyecto.',
     buyMeCoffee: 'Inv\u00edtame un caf\u00e9',
+    darkMode: 'Modo oscuro',
+    lightMode: 'Modo claro',
     colorblindMode: 'Modo dalt\u00f3nico',
     howItWorks: 'Cómo funciona',
     privacyPolicy: 'Pol\u00edtica de privacidad',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '\u00a1%{count} fotos!',
+    goodStart: '\u00a1Buen comienzo!',
+    niceWork: '\u00a1Buen trabajo!',
+    gettingStarted: '\u00a1En marcha!',
+    halfwayToHundred: '\u00a1A mitad de camino!',
+    almostThere: '\u00a1Casi!',
     onARoll: '\u00a1Vas lanzado!',
     keepItUp: '\u00a1Sigue as\u00ed!',
     cleaningMachine: '\u00a1M\u00e1quina de limpieza!',

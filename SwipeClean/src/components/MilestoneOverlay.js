@@ -6,15 +6,22 @@ import { sw } from '../utils/scale';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// Generate milestones: 100, 200, 300, 400, 500, 1000, 1500, 2000, ..., 50000
+// Generate milestones: 5, 10, 25, 50, 75, then every 50 to 500, then every 100 to 1000, then every 500
 const MILESTONES = (() => {
-  const m = [100, 200, 300, 400, 500, 1000];
+  const m = [5, 10, 25, 50, 75];
+  for (let i = 100; i <= 500; i += 50) m.push(i);
+  for (let i = 600; i <= 1000; i += 100) m.push(i);
   for (let i = 1500; i <= 50000; i += 500) m.push(i);
   return m;
 })();
 
 function getMilestoneMessage(count) {
   const title = t('milestones.photos', { count: count.toLocaleString() });
+  if (count === 5) return { title, subtitle: t('milestones.goodStart'), icon: 'thumbs-up' };
+  if (count === 10) return { title, subtitle: t('milestones.niceWork'), icon: 'sparkles' };
+  if (count === 25) return { title, subtitle: t('milestones.gettingStarted'), icon: 'flash' };
+  if (count === 50) return { title, subtitle: t('milestones.halfwayToHundred'), icon: 'rocket' };
+  if (count === 75) return { title, subtitle: t('milestones.almostThere'), icon: 'star' };
   if (count === 100) return { title, subtitle: t('milestones.onARoll'), icon: 'flame' };
   if (count === 200) return { title, subtitle: t('milestones.keepItUp'), icon: 'rocket' };
   if (count === 300) return { title, subtitle: t('milestones.cleaningMachine'), icon: 'flash' };

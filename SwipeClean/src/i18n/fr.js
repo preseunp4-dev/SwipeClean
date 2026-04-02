@@ -53,6 +53,7 @@ export default {
     muted: 'Muet',
     sound: 'Son',
     filterAll: 'Tout',
+    filterRandom: 'Aléatoire',
     filterScreenshots: 'Captures d\'\u00e9cran',
     filterVideos: 'Vid\u00e9os',
     filterOldest: 'Plus anciennes',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Erreur',
     deleteErrorMessage: 'Impossible de supprimer certains \u00e9l\u00e9ments. Veuillez r\u00e9essayer.',
     deleteAll: 'Tout supprimer',
+    select: 'Sélectionner',
+    selected: '%{count} sélectionné(s)',
+    deleteSelected: 'Supprimer (%{count})',
+    restoreSelected: 'Restaurer (%{count})',
+    selectAll: 'Tout',
+    deselectAll: 'Aucun',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean a besoin d\'acc\u00e9der \u00e0 votre phototh\u00e8que pour rechercher les doublons.',
     errorTitle: 'Erreur',
     errorMessage: 'Une erreur est survenue lors de l\'analyse.',
+    analyzingSize: 'Analyse des tailles...',
+    tapToTrash: 'Appuyez pour supprimer',
+    duplicatesFound: 'Doublons trouvés',
+    keepAll: 'Tout garder',
+    photosFound: 'photos',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'J\'ai cr\u00e9\u00e9 SwipeClean parce que j\'en avais assez des applis de nettoyage de photos bourr\u00e9es de pubs, avec des murs payants \u00e0 chaque \u00e9cran et des abonnements sournois. Votre t\u00e9l\u00e9phone a d\u00e9j\u00e0 des milliers de photos \u2014 vous ne devriez pas avoir \u00e0 payer $9.99/semaine juste pour les supprimer.',
     aboutText2: 'Cette appli, c\'est juste moi \u2014 une personne qui voulait un outil simple et honn\u00eate qui aide vraiment. Si SwipeClean vous a fait gagner du temps ou de l\'espace, pensez \u00e0 m\'offrir un caf\u00e9. \u00c7a aide sinc\u00e8rement \u00e0 faire vivre ce projet.',
     buyMeCoffee: 'M\'offrir un caf\u00e9',
+    darkMode: 'Mode sombre',
+    lightMode: 'Mode clair',
     colorblindMode: 'Mode daltonien',
     howItWorks: 'Comment ça marche',
     privacyPolicy: 'Politique de confidentialit\u00e9',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} photos !',
+    goodStart: 'Bon d\u00e9but !',
+    niceWork: 'Beau travail !',
+    gettingStarted: 'C\'est parti !',
+    halfwayToHundred: '\u00c0 mi-chemin de 100 !',
+    almostThere: 'Presque !',
     onARoll: 'Vous \u00eates lanc\u00e9 !',
     keepItUp: 'Continuez comme \u00e7a !',
     cleaningMachine: 'Machine \u00e0 nettoyer !',

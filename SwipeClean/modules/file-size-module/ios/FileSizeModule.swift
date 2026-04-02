@@ -13,7 +13,6 @@ public class FileSizeModule: Module {
         let asset = fetchResult.object(at: i)
         let resources = PHAssetResource.assetResources(for: asset)
 
-        // Sum all resources (handles Live Photos: photo + video component)
         var totalSize: Int64 = 0
         for resource in resources {
           if let size = resource.value(forKey: "fileSize") as? Int64 {
@@ -31,40 +30,53 @@ public class FileSizeModule: Module {
     }
 
     AsyncFunction("getAllFileSizesSorted") { (mediaTypes: [Int]) -> [[String: Any]] in
-      let options = PHFetchOptions()
-      options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-
-      var allAssets: [PHAsset] = []
+      // Process in batches to avoid blocking the main thread for too long
+      var allAssetsWithSize: [(id: String, size: Int64)] = []
 
       for mediaType in mediaTypes {
         let type: PHAssetMediaType = mediaType == 1 ? .image : .video
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let fetchResult = PHAsset.fetchAssets(with: type, options: options)
-        for i in 0..<fetchResult.count {
-          allAssets.append(fetchResult.object(at: i))
-        }
-      }
 
-      // Get file sizes from metadata (no image loading)
-      var assetsWithSize: [(id: String, size: Int64)] = []
-      for asset in allAssets {
-        let resources = PHAssetResource.assetResources(for: asset)
-        var totalSize: Int64 = 0
-        for resource in resources {
-          if let size = resource.value(forKey: "fileSize") as? Int64 {
-            totalSize += size
+        // Process in batches of 200
+        let batchSize = 200
+        for batchStart in stride(from: 0, to: fetchResult.count, by: batchSize) {
+          let batchEnd = min(batchStart + batchSize, fetchResult.count)
+          for i in batchStart..<batchEnd {
+            let asset = fetchResult.object(at: i)
+            let resources = PHAssetResource.assetResources(for: asset)
+            var totalSize: Int64 = 0
+            for resource in resources {
+              if let size = resource.value(forKey: "fileSize") as? Int64 {
+                totalSize += size
+              }
+            }
+            // Include even iCloud assets — estimate from pixel dimensions if no local size
+            if totalSize > 0 {
+              allAssetsWithSize.append((id: asset.localIdentifier, size: totalSize))
+            } else {
+              // Estimate: ~3 bytes per pixel for photos, ~10 bytes per pixel per second for video
+              let pixels = Int64(asset.pixelWidth) * Int64(asset.pixelHeight)
+              let estimated: Int64
+              if asset.mediaType == .video {
+                estimated = pixels * Int64(max(asset.duration, 1)) * 2
+              } else {
+                estimated = pixels * 3
+              }
+              if estimated > 0 {
+                allAssetsWithSize.append((id: asset.localIdentifier, size: estimated))
+              }
+            }
           }
-        }
-        // Skip iCloud-only assets with no local size info
-        if totalSize > 0 {
-          assetsWithSize.append((id: asset.localIdentifier, size: totalSize))
         }
       }
 
       // Sort by size descending
-      assetsWithSize.sort { $0.size > $1.size }
+      allAssetsWithSize.sort { $0.size > $1.size }
 
       // Return top 500
-      let top = assetsWithSize.prefix(500)
+      let top = allAssetsWithSize.prefix(500)
       return top.map { ["id": $0.id, "fileSize": $0.size] }
     }
   }

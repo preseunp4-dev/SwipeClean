@@ -7,6 +7,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AppProvider } from './src/context/AppContext';
 import { ColorProvider, useColors } from './src/context/ColorContext';
@@ -99,8 +100,8 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+    <GestureHandlerRootView style={styles.root}>
     <SafeAreaProvider>
-    <View style={styles.root}>
       <ColorProvider>
       <AppProvider>
         <MainTabs />
@@ -112,8 +113,8 @@ export default function App() {
         )}
       </AppProvider>
       </ColorProvider>
-    </View>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }

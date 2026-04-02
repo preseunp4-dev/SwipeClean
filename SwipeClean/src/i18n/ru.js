@@ -53,6 +53,7 @@ export default {
     muted: 'Без звука',
     sound: 'Звук',
     filterAll: 'Все',
+    filterRandom: 'Случайный',
     filterScreenshots: 'Скриншоты',
     filterVideos: 'Видео',
     filterOldest: 'Старые',
@@ -81,6 +82,12 @@ export default {
     deleteErrorTitle: 'Ошибка',
     deleteErrorMessage: 'Не удалось удалить некоторые элементы. Попробуйте ещё раз.',
     deleteAll: 'Удалить все',
+    select: 'Выбрать',
+    selected: '%{count} выбрано',
+    deleteSelected: 'Удалить (%{count})',
+    restoreSelected: 'Восстановить (%{count})',
+    selectAll: 'Все',
+    deselectAll: 'Ничего',
   },
 
   // DuplicatesScreen
@@ -119,6 +126,11 @@ export default {
     permissionMessage: 'SwipeClean нужен доступ к вашей фототеке для поиска дубликатов.',
     errorTitle: 'Ошибка',
     errorMessage: 'Что-то пошло не так при сканировании.',
+    analyzingSize: 'Анализ размеров файлов...',
+    tapToTrash: 'Нажмите для удаления',
+    duplicatesFound: 'Дубликаты найдены',
+    keepAll: 'Оставить все',
+    photosFound: 'фото',
   },
 
   // StatsScreen
@@ -149,6 +161,8 @@ export default {
     aboutText1: 'Я создал SwipeClean, потому что устал от приложений для очистки фото, набитых рекламой, с платными экранами на каждом шагу и скрытыми подписками. В вашем телефоне и так тысячи фотографий — не нужно платить $9.99/неделю, чтобы их удалить.',
     aboutText2: 'За этим приложением стою только я — один человек, который хотел сделать простой, честный инструмент, который реально помогает. Если SwipeClean сэкономил вам время или место, угостите меня кофе. Это действительно помогает продолжать.',
     buyMeCoffee: 'Угостить кофе',
+    darkMode: 'Тёмный режим',
+    lightMode: 'Светлый режим',
     colorblindMode: 'Режим для дальтоников',
     howItWorks: 'Как это работает',
     privacyPolicy: 'Политика конфиденциальности',
@@ -169,6 +183,11 @@ export default {
   // Milestones
   milestones: {
     photos: '%{count} фото!',
+    goodStart: 'Хорошее начало!',
+    niceWork: 'Отличная работа!',
+    gettingStarted: 'Начало положено!',
+    halfwayToHundred: 'Половина до 100!',
+    almostThere: 'Почти!',
     onARoll: 'Вы в ударе!',
     keepItUp: 'Так держать!',
     cleaningMachine: 'Машина для уборки!',
