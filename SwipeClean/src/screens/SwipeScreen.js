@@ -269,6 +269,9 @@ export default function SwipeScreen() {
 
         dispatch({ type: 'SET_ASSETS', payload: batch });
 
+        // Cache the result for this filter immediately
+        filterCacheRef.current[filter] = { assets: batch, currentIndex: 0 };
+
         // Background: prefetch images + file sizes for the first 5 cards
         (async () => {
           for (const a of batch.slice(0, 5)) {

@@ -78,9 +78,9 @@ public class PhotoQualityModule: Module {
 
           // Face bonus
           if faceResults.faceCount > 0 {
-            composite += faceResults.quality * 15  // Face quality
-            if faceResults.eyesOpen { composite += 10 }  // Eyes open bonus
-            if faceResults.smiling { composite += 10 }   // Smile bonus
+            composite += faceResults.quality * 10  // Face quality (size/clarity)
+            if faceResults.eyesOpen { composite += 12 } else { composite -= 5 } // Eyes open/closed
+            if faceResults.smiling { composite += 13 } else { composite -= 3 }  // Smiling/not
           } else {
             // No faces — redistribute face points to sharpness/exposure
             composite += sharpness * 20

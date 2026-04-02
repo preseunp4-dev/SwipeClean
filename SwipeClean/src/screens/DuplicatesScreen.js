@@ -17,7 +17,7 @@ import {
   Modal,
   Linking,
 } from 'react-native';
-import { PanGestureHandler, State, NativeViewGestureHandler } from 'react-native-gesture-handler';
+import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import ZoomableImage from '../components/ZoomableImage';
 import { Ionicons } from '@expo/vector-icons';
@@ -353,6 +353,14 @@ export default function DuplicatesScreen() {
             allAssets[j].width === allAssets[i].width &&
             allAssets[j].height === allAssets[i].height
           ) {
+            // File size similarity check — burst photos have similar sizes
+            // WhatsApp/saved photos of different scenes don't
+            const sizeA = allAssets[i].fileSize || 0;
+            const sizeB = allAssets[j].fileSize || 0;
+            if (sizeA > 0 && sizeB > 0) {
+              const ratio = Math.min(sizeA, sizeB) / Math.max(sizeA, sizeB);
+              if (ratio < 0.5) continue; // More than 2x size difference — not a burst
+            }
             cluster.push(allAssets[j]);
             used.add(allAssets[j].id);
           }
@@ -595,7 +603,7 @@ export default function DuplicatesScreen() {
                     >
                       <Image
                         source={{ uri: asset.uri }}
-                        style={[styles.thumb, isTrashed && { borderColor: colors.red }, isBest && styles.bestThumb]}
+                        style={[styles.thumb, isTrashed ? { borderColor: colors.red } : { borderColor: colors.green }, isBest && styles.bestThumb]}
                         contentFit="cover"
                       />
                       {isBest && (
@@ -648,6 +656,7 @@ export default function DuplicatesScreen() {
       />
 
       <Modal visible={!!expanded} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(null)}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
         {expanded && (() => {
           const group = groups.find((g) => g.id === expanded.groupId);
           if (!group) { setExpanded(null); return null; }
@@ -661,6 +670,7 @@ export default function DuplicatesScreen() {
             />
           );
         })()}
+        </GestureHandlerRootView>
       </Modal>
 
       <LinearGradient

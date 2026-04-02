@@ -85,9 +85,9 @@ class PhotoQualityModule : Module() {
           composite += fileSizeScore * 10
 
           if (faceResult.faceCount > 0) {
-            composite += faceResult.quality * 15
-            if (faceResult.eyesOpen) composite += 10
-            if (faceResult.smiling) composite += 10
+            composite += faceResult.quality * 10
+            if (faceResult.eyesOpen) composite += 12 else composite -= 5
+            if (faceResult.smiling) composite += 13 else composite -= 3
           } else {
             composite += sharpness * 20
             composite += exposureScore * 15
