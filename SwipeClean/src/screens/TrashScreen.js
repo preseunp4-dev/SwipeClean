@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { PanGestureHandler, State, NativeViewGestureHandler, LongPressGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
-import ZoomableImage from '../components/ZoomableImage';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
@@ -664,7 +663,9 @@ export default function TrashScreen() {
                     {item.mediaType === 'video' ? (
                       <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
                     ) : (
-                      <ZoomableImage uri={item.uri} width={fitW} height={fitH} onZoomChange={(z) => { setPreviewZoomed(z); setPreviewScrollEnabled(!z); }} />
+                      <View style={{ width: fitW, height: fitH, borderRadius: 12, overflow: 'hidden' }}>
+                        <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH }} contentFit="cover" />
+                      </View>
                     )}
                   </View>
                 );
