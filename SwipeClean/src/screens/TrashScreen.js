@@ -660,15 +660,13 @@ export default function TrashScreen() {
                   fitW = fitH * aspect;
                 }
                 return (
-                  <Pressable style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]} onPress={() => setPreviewIndex(null)}>
-                    <Pressable>
+                  <View style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}>
                     {item.mediaType === 'video' ? (
                       <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
                     ) : (
                       <ZoomableImage uri={item.uri} width={fitW} height={fitH} onZoomChange={(z) => { setPreviewZoomed(z); setPreviewScrollEnabled(!z); }} />
                     )}
-                    </Pressable>
-                  </Pressable>
+                  </View>
                 );
               }}
             />
