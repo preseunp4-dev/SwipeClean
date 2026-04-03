@@ -620,66 +620,53 @@ export default function TrashScreen() {
       {/* Fullscreen preview modal */}
       {previewIndex !== null && (
         <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,1)'] }) }]} />
-          <PanGestureHandler
-            ref={panRef}
-            onGestureEvent={onDismissGesture}
-            onHandlerStateChange={onDismissStateChange}
-            activeOffsetY={15}
-            simultaneousHandlers={nativeRef}
-            enabled={!previewZoomed}
-          >
-          <Animated.View style={[styles.modalContainer, { backgroundColor: 'transparent', transform: [{ translateX: openTx }, { translateY: Animated.add(openTy, dismissY) }, { scale: dismissScale }], borderRadius: dismissScale.interpolate({ inputRange: [0.7, 1], outputRange: [16, 0], extrapolate: 'clamp' }) }]}>
-            <NativeViewGestureHandler ref={nativeRef} simultaneousHandlers={panRef}>
-            <FlatList
-              ref={previewListRef}
-              data={trashed}
-              horizontal
-              pagingEnabled
-              scrollEnabled={previewScrollEnabled}
-              showsHorizontalScrollIndicator={false}
-              initialScrollIndex={previewIndex}
-              getItemLayout={(_, i) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * i, index: i })}
-              onMomentumScrollEnd={(e) => {
-                const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                setPreviewIndex(idx);
-              }}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item, index }) => {
-                const padTop = insets.top + 23;
-                const padBottom = insets.bottom + 6;
-                const availW = SCREEN_WIDTH - 16;
-                const availH = SCREEN_HEIGHT - padTop - padBottom;
-                const aspect = (item.width && item.height) ? item.width / item.height : 3 / 4;
-                let fitW = availW;
-                let fitH = fitW / aspect;
-                if (fitH > availH) {
-                  fitH = availH;
-                  fitW = fitH * aspect;
-                }
-                return (
-                  <View style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}>
-                    {item.mediaType === 'video' ? (
-                      <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
-                    ) : (
-                      <View style={{ width: fitW, height: fitH, borderRadius: 12, overflow: 'hidden' }}>
-                        <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH }} contentFit="cover" />
-                      </View>
-                    )}
-                  </View>
-                );
-              }}
-            />
-            </NativeViewGestureHandler>
-          </Animated.View>
-          </PanGestureHandler>
-          <Animated.View style={[styles.modalClose, { top: insets.top + 20, opacity: dismissBg }]} pointerEvents="auto">
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
+          <FlatList
+            ref={previewListRef}
+            data={trashed}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={previewIndex}
+            getItemLayout={(_, i) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * i, index: i })}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setPreviewIndex(idx);
+            }}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item, index }) => {
+              const padTop = insets.top + 23;
+              const padBottom = insets.bottom + 6;
+              const availW = SCREEN_WIDTH - 16;
+              const availH = SCREEN_HEIGHT - padTop - padBottom;
+              const aspect = (item.width && item.height) ? item.width / item.height : 3 / 4;
+              let fitW = availW;
+              let fitH = fitW / aspect;
+              if (fitH > availH) {
+                fitH = availH;
+                fitW = fitH * aspect;
+              }
+              return (
+                <View style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}>
+                  {item.mediaType === 'video' ? (
+                    <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => {}} onScrubEnd={() => {}} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
+                  ) : (
+                    <View style={{ width: fitW, height: fitH, borderRadius: 12, overflow: 'hidden' }}>
+                      <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH }} contentFit="cover" />
+                    </View>
+                  )}
+                </View>
+              );
+            }}
+          />
+          <View style={[styles.modalClose, { top: insets.top + 20 }]} pointerEvents="auto">
             <TouchableOpacity activeOpacity={0.7} onPress={() => setPreviewIndex(null)}>
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
-          </Animated.View>
-          </GestureHandlerRootView>
+          </View>
+          <View style={[styles.previewCounter, { top: insets.top + 20 }]}>
+            <Text style={styles.previewCounterText}>{previewIndex + 1} / {trashed.length}</Text>
+          </View>
         </Modal>
       )}
     </View>
@@ -860,6 +847,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: sw(20),
     zIndex: 20,
+  },
+  previewCounter: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 20,
+  },
+  previewCounterText: {
+    color: '#fff',
+    fontSize: sw(16),
+    fontWeight: '700',
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFillObject,

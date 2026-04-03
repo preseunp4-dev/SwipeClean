@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Linking, I
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { useApp, DAILY_FREE_LIMIT } from '../context/AppContext';
 import { useColors } from '../context/ColorContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -225,6 +226,9 @@ export default function StatsScreen() {
             <Text style={[styles.legalLink, { color: theme.textQuaternary }]}>{t('stats.termsOfUse')}</Text>
           </TouchableOpacity>
         </View>
+        <Text style={[styles.versionText, { color: theme.textQuaternary }]}>
+          v{Constants.expoConfig?.version || '1.0.0'} ({Constants.expoConfig?.ios?.buildNumber || '1'})
+        </Text>
       </ScrollView>
 
       <LinearGradient
@@ -460,6 +464,12 @@ const styles = StyleSheet.create({
   legalDot: {
     color: '#555',
     fontSize: sw(12),
+  },
+  versionText: {
+    textAlign: 'center',
+    fontSize: sw(11),
+    marginTop: 12,
+    marginBottom: 8,
   },
   colorblindToggle: {
     flexDirection: 'row',
