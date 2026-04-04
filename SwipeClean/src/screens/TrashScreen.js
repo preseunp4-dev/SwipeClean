@@ -13,9 +13,9 @@ import {
   Pressable,
   PanResponder,
 } from 'react-native';
-import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
-import ZoomableImage from '../components/ZoomableImage';
+import { PanGestureHandler, State, NativeViewGestureHandler, LongPressGestureHandler } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
+import ZoomableImage from '../components/ZoomableImage';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
@@ -222,16 +222,20 @@ export default function TrashScreen() {
   const [previewIndex, setPreviewIndex] = useState(null);
   const [previewScrollEnabled, setPreviewScrollEnabled] = useState(true);
   const [previewZoomed, setPreviewZoomed] = useState(false);
-  const thumbRefs = useRef({});
-  const panRef = useRef(null);
+  const previewListRef = useRef(null);
   const nativeRef = useRef(null);
+  const panRef = useRef(null);
+  const thumbRefs = useRef({});
+  const previewOriginRef = useRef(null);
   const dismissY = useRef(new Animated.Value(0)).current;
   const dismissScale = useRef(new Animated.Value(1)).current;
   const dismissBg = useRef(new Animated.Value(1)).current;
+  const openTx = useRef(new Animated.Value(0)).current;
+  const openTy = useRef(new Animated.Value(0)).current;
   const dismissActiveRef = useRef(false);
-
   const onDismissGesture = useCallback(({ nativeEvent }) => {
     const { translationY, translationX } = nativeEvent;
+    // Only process dismiss if clearly vertical (not horizontal swipe)
     if (translationY > 0 && translationY > Math.abs(translationX)) {
       dismissActiveRef.current = true;
       dismissY.setValue(translationY);
@@ -247,16 +251,22 @@ export default function TrashScreen() {
       dismissActiveRef.current = false;
       const { translationY, velocityY } = nativeEvent;
       if (translationY > 120 || velocityY > 500) {
-        Animated.timing(dismissBg, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+        Animated.timing(dismissY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start();
+        Animated.timing(dismissScale, { toValue: 0.5, duration: 250, useNativeDriver: true }).start();
+        Animated.timing(dismissBg, { toValue: 0, duration: 250, useNativeDriver: false }).start();
         setTimeout(() => {
           setPreviewIndex(null);
           setPreviewScrollEnabled(true);
-          setPreviewZoomed(false);
-          dismissY.setValue(0);
-          dismissScale.setValue(1);
-          dismissBg.setValue(1);
-        }, 210);
+          requestAnimationFrame(() => {
+            dismissY.setValue(0);
+            dismissScale.setValue(1);
+            dismissBg.setValue(1);
+            openTx.setValue(0);
+            openTy.setValue(0);
+          });
+        }, 260);
       } else {
+        setPreviewScrollEnabled(true);
         Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
         Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
         Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
@@ -264,8 +274,35 @@ export default function TrashScreen() {
     }
   }, []);
 
-  const openPreview = useCallback((index) => {
+  const openPreview = useCallback((index, origin) => {
+    if (origin) {
+      const originScale = origin.w / SCREEN_WIDTH;
+      const tx = (origin.x + origin.w / 2) - SCREEN_WIDTH / 2;
+      const ty = (origin.y + origin.h / 2) - SCREEN_HEIGHT / 2;
+      dismissScale.setValue(originScale);
+      dismissBg.setValue(0);
+      openTx.setValue(tx);
+      openTy.setValue(ty);
+      previewOriginRef.current = origin;
+    } else {
+      dismissScale.setValue(1);
+      dismissBg.setValue(1);
+      openTx.setValue(0);
+      openTy.setValue(0);
+      previewOriginRef.current = null;
+    }
+    dismissY.setValue(0);
     setPreviewIndex(index);
+    if (origin) {
+      requestAnimationFrame(() => {
+        Animated.parallel([
+          Animated.spring(dismissScale, { toValue: 1, tension: 50, friction: 9, useNativeDriver: true }),
+          Animated.spring(openTx, { toValue: 0, tension: 50, friction: 9, useNativeDriver: true }),
+          Animated.spring(openTy, { toValue: 0, tension: 50, friction: 9, useNativeDriver: true }),
+          Animated.timing(dismissBg, { toValue: 1, duration: 250, useNativeDriver: false }),
+        ]).start();
+      });
+    }
   }, []);
 
   const totalSize = useMemo(() => trashed.reduce((sum, a) => sum + (a.fileSize || 0), 0), [trashed]);
@@ -487,7 +524,16 @@ export default function TrashScreen() {
               ref={(ref) => { if (ref) thumbRefs.current[index] = ref; }}
               style={[styles.thumbContainer, { backgroundColor: theme.card }]}
               activeOpacity={0.7}
-              onPress={selecting ? () => toggleSelect(item.id) : () => openPreview(index)}
+              onPress={selecting ? () => toggleSelect(item.id) : () => {
+                const ref = thumbRefs.current[index];
+                if (ref) {
+                  ref.measureInWindow((x, y, w, h) => {
+                    openPreview(index, { x, y, w, h });
+                  });
+                } else {
+                  openPreview(index, null);
+                }
+              }}
             >
               <Image source={{ uri: item.uri }} style={styles.thumb} contentFit="cover" />
               {item.mediaType === 'video' && (
@@ -576,7 +622,6 @@ export default function TrashScreen() {
       {/* Fullscreen preview modal */}
       {previewIndex !== null && (
         <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,1)'] }) }]} />
           <PanGestureHandler
             ref={panRef}
@@ -586,9 +631,10 @@ export default function TrashScreen() {
             simultaneousHandlers={nativeRef}
             enabled={!previewZoomed}
           >
-          <Animated.View style={[styles.modalContainer, { backgroundColor: 'transparent', transform: [{ translateY: dismissY }, { scale: dismissScale }] }]}>
+          <Animated.View style={[styles.modalContainer, { backgroundColor: 'transparent', transform: [{ translateX: openTx }, { translateY: Animated.add(openTy, dismissY) }, { scale: dismissScale }], borderRadius: dismissScale.interpolate({ inputRange: [0.7, 1], outputRange: [16, 0], extrapolate: 'clamp' }) }]}>
             <NativeViewGestureHandler ref={nativeRef} simultaneousHandlers={panRef}>
             <FlatList
+              ref={previewListRef}
               data={trashed}
               horizontal
               pagingEnabled
@@ -609,18 +655,18 @@ export default function TrashScreen() {
                 const aspect = (item.width && item.height) ? item.width / item.height : 3 / 4;
                 let fitW = availW;
                 let fitH = fitW / aspect;
-                if (fitH > availH) { fitH = availH; fitW = fitH * aspect; }
+                if (fitH > availH) {
+                  fitH = availH;
+                  fitW = fitH * aspect;
+                }
                 return (
-                  <Pressable
-                    onPress={() => setPreviewIndex(null)}
-                    style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}
-                  >
+                  <Pressable style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]} onPress={() => setPreviewIndex(null)}>
                     <Pressable>
-                      {item.mediaType === 'video' ? (
-                        <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
-                      ) : (
-                        <ZoomableImage uri={item.uri} width={fitW} height={fitH} onZoomChange={(z) => { setPreviewZoomed(z); setPreviewScrollEnabled(!z); }} />
-                      )}
+                    {item.mediaType === 'video' ? (
+                      <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
+                    ) : (
+                      <ZoomableImage uri={item.uri} width={fitW} height={fitH} onZoomChange={(z) => { setPreviewZoomed(z); setPreviewScrollEnabled(!z); }} />
+                    )}
                     </Pressable>
                   </Pressable>
                 );
@@ -634,10 +680,6 @@ export default function TrashScreen() {
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
           </Animated.View>
-          <Animated.View style={[styles.previewCounter, { top: insets.top + 20, opacity: dismissBg }]}>
-            <Text style={styles.previewCounterText}>{previewIndex + 1} / {trashed.length}</Text>
-          </Animated.View>
-          </GestureHandlerRootView>
         </Modal>
       )}
     </View>
@@ -818,23 +860,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: sw(20),
     zIndex: 20,
-  },
-  videoPlayBadge: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderRadius: 12,
-  },
-  previewCounter: {
-    position: 'absolute',
-    alignSelf: 'center',
-    zIndex: 20,
-  },
-  previewCounterText: {
-    color: '#fff',
-    fontSize: sw(16),
-    fontWeight: '700',
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFillObject,
