@@ -11,6 +11,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  PanResponder,
 } from 'react-native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
