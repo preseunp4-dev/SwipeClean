@@ -13,7 +13,8 @@ import {
   Pressable,
   PanResponder,
 } from 'react-native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
+import ZoomableImage from '../components/ZoomableImage';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
@@ -219,7 +220,49 @@ export default function TrashScreen() {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [previewIndex, setPreviewIndex] = useState(null);
+  const [previewScrollEnabled, setPreviewScrollEnabled] = useState(true);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
   const thumbRefs = useRef({});
+  const panRef = useRef(null);
+  const nativeRef = useRef(null);
+  const dismissY = useRef(new Animated.Value(0)).current;
+  const dismissScale = useRef(new Animated.Value(1)).current;
+  const dismissBg = useRef(new Animated.Value(1)).current;
+  const dismissActiveRef = useRef(false);
+
+  const onDismissGesture = useCallback(({ nativeEvent }) => {
+    const { translationY, translationX } = nativeEvent;
+    if (translationY > 0 && translationY > Math.abs(translationX)) {
+      dismissActiveRef.current = true;
+      dismissY.setValue(translationY);
+      const progress = Math.min(translationY / 300, 1);
+      dismissScale.setValue(1 - progress * 0.3);
+      dismissBg.setValue(1 - progress);
+    }
+  }, []);
+
+  const onDismissStateChange = useCallback(({ nativeEvent }) => {
+    if (nativeEvent.oldState === State.ACTIVE) {
+      if (!dismissActiveRef.current) return;
+      dismissActiveRef.current = false;
+      const { translationY, velocityY } = nativeEvent;
+      if (translationY > 120 || velocityY > 500) {
+        Animated.timing(dismissBg, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+        setTimeout(() => {
+          setPreviewIndex(null);
+          setPreviewScrollEnabled(true);
+          setPreviewZoomed(false);
+          dismissY.setValue(0);
+          dismissScale.setValue(1);
+          dismissBg.setValue(1);
+        }, 210);
+      } else {
+        Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
+        Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
+        Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
+      }
+    }
+  }, []);
 
   const openPreview = useCallback((index) => {
     setPreviewIndex(index);
@@ -533,11 +576,23 @@ export default function TrashScreen() {
       {/* Fullscreen preview modal */}
       {previewIndex !== null && (
         <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
-          <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,1)'] }) }]} />
+          <PanGestureHandler
+            ref={panRef}
+            onGestureEvent={onDismissGesture}
+            onHandlerStateChange={onDismissStateChange}
+            activeOffsetY={15}
+            simultaneousHandlers={nativeRef}
+            enabled={!previewZoomed}
+          >
+          <Animated.View style={[styles.modalContainer, { backgroundColor: 'transparent', transform: [{ translateY: dismissY }, { scale: dismissScale }] }]}>
+            <NativeViewGestureHandler ref={nativeRef} simultaneousHandlers={panRef}>
             <FlatList
               data={trashed}
               horizontal
               pagingEnabled
+              scrollEnabled={previewScrollEnabled}
               showsHorizontalScrollIndicator={false}
               initialScrollIndex={previewIndex}
               getItemLayout={(_, i) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * i, index: i })}
@@ -556,31 +611,33 @@ export default function TrashScreen() {
                 let fitH = fitW / aspect;
                 if (fitH > availH) { fitH = availH; fitW = fitH * aspect; }
                 return (
-                  <TouchableOpacity
-                    activeOpacity={1}
+                  <Pressable
                     onPress={() => setPreviewIndex(null)}
                     style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}
                   >
-                    <TouchableOpacity activeOpacity={1}>
+                    <Pressable>
                       {item.mediaType === 'video' ? (
-                        <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => {}} onScrubEnd={() => {}} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
+                        <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => setPreviewScrollEnabled(false)} onScrubEnd={() => setPreviewScrollEnabled(true)} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
                       ) : (
-                        <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH, borderRadius: 12 }} contentFit="cover" />
+                        <ZoomableImage uri={item.uri} width={fitW} height={fitH} onZoomChange={(z) => { setPreviewZoomed(z); setPreviewScrollEnabled(!z); }} />
                       )}
-                    </TouchableOpacity>
-                  </TouchableOpacity>
+                    </Pressable>
+                  </Pressable>
                 );
               }}
             />
-          </View>
-          <View style={[styles.modalClose, { top: insets.top + 20 }]} pointerEvents="auto">
+            </NativeViewGestureHandler>
+          </Animated.View>
+          </PanGestureHandler>
+          <Animated.View style={[styles.modalClose, { top: insets.top + 20, opacity: dismissBg }]} pointerEvents="auto">
             <TouchableOpacity activeOpacity={0.7} onPress={() => setPreviewIndex(null)}>
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
-          </View>
-          <View style={[styles.previewCounter, { top: insets.top + 20 }]}>
+          </Animated.View>
+          <Animated.View style={[styles.previewCounter, { top: insets.top + 20, opacity: dismissBg }]}>
             <Text style={styles.previewCounterText}>{previewIndex + 1} / {trashed.length}</Text>
-          </View>
+          </Animated.View>
+          </GestureHandlerRootView>
         </Modal>
       )}
     </View>
