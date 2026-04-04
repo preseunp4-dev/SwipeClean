@@ -13,7 +13,7 @@ import {
   Pressable,
   PanResponder,
 } from 'react-native';
-import { PanGestureHandler, State, NativeViewGestureHandler, LongPressGestureHandler } from 'react-native-gesture-handler';
+import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import ZoomableImage from '../components/ZoomableImage';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -622,6 +622,7 @@ export default function TrashScreen() {
       {/* Fullscreen preview modal */}
       {previewIndex !== null && (
         <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
+          <GestureHandlerRootView style={{ flex: 1 }}>
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,1)'] }) }]} />
           <PanGestureHandler
             ref={panRef}
@@ -680,6 +681,7 @@ export default function TrashScreen() {
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
           </Animated.View>
+          </GestureHandlerRootView>
         </Modal>
       )}
     </View>
