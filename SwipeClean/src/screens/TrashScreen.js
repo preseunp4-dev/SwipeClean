@@ -649,11 +649,10 @@ export default function TrashScreen() {
                     style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}
                   >
                     <TouchableOpacity activeOpacity={1}>
-                      <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH, borderRadius: 12 }} contentFit="cover" />
-                      {item.mediaType === 'video' && (
-                        <View style={styles.videoPlayBadge}>
-                          <Ionicons name="play" size={40} color="rgba(255,255,255,0.9)" />
-                        </View>
+                      {item.mediaType === 'video' ? (
+                        <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => {}} onScrubEnd={() => {}} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
+                      ) : (
+                        <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH, borderRadius: 12 }} contentFit="cover" />
                       )}
                     </TouchableOpacity>
                   </TouchableOpacity>
