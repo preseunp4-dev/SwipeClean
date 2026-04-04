@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useApp, DAILY_FREE_LIMIT } from '../context/AppContext';
+import { usePurchases } from '../context/PurchaseContext';
 import { Image } from 'expo-image';
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT, MIN_CARD_BUTTON_GAP } from '../components/SwipeCard';
 import MilestoneOverlay from '../components/MilestoneOverlay';
@@ -45,6 +46,7 @@ export default function SwipeScreen() {
   const { colors, theme } = useColors();
   const insets = useSafeAreaInsets();
   const { state, dispatch, keep, trash, undo, resetSeenIds, resetLimits } = useApp();
+  const { proProduct, weeklyProduct, purchaseProduct, restorePurchases, isPro: isProPurchased } = usePurchases();
   const { assets, currentIndex, loading, hasMore, seenIds,
           dailySwipes, dailyLimitReached, isPro, persistLoaded,
           totalKept, totalTrashed } = state;
@@ -604,21 +606,21 @@ export default function SwipeScreen() {
             <Text style={[styles.statTrashed, { color: colors.red }]}>{t('swipe.trashed', { count: totalTrashed })}</Text>
           </View>
           <View style={styles.upgradeOptions}>
-            <TouchableOpacity style={styles.upgradeButton} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.upgradeButton} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.pro')}>
               <Ionicons name="infinite" size={20} color="#fff" style={{ marginBottom: 4 }} />
               <Text style={[styles.upgradeTitle, { color: '#fff' }]}>{t('swipe.unlimited')}</Text>
-              <Text style={styles.upgradePrice}>{t('swipe.oneTimePrice')}</Text>
+              <Text style={styles.upgradePrice}>{proProduct?.price ? `${proProduct.price} ${t('swipe.oneTimeLabel')}` : t('swipe.oneTimePrice')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.card, borderColor: theme.accent }]} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.card, borderColor: theme.accent }]} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.weekly')}>
               <Ionicons name="refresh" size={20} color={theme.text} style={{ marginBottom: 4 }} />
               <Text style={[styles.upgradeTitle, { color: theme.text }]}>{t('swipe.weekly')}</Text>
-              <Text style={styles.upgradePrice}>{t('swipe.weeklyPrice')}</Text>
+              <Text style={styles.upgradePrice}>{weeklyProduct?.price ? `${weeklyProduct.price}/${t('swipe.weekLabel')}` : t('swipe.weeklyPrice')}</Text>
             </TouchableOpacity>
           </View>
           <Text style={[styles.legalText, { color: theme.textQuaternary }]}>
             {t('swipe.legalText')}
           </Text>
-          <TouchableOpacity onPress={() => {}} activeOpacity={0.7}>
+          <TouchableOpacity onPress={restorePurchases} activeOpacity={0.7}>
             <Text style={styles.restoreText}>{t('swipe.restorePurchases')}</Text>
           </TouchableOpacity>
           <Text style={[styles.resetHint, { color: theme.textQuaternary }]}>{t('swipe.freeSwipesReset')}</Text>

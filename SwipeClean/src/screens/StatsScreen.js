@@ -5,6 +5,7 @@ import { useRoute } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { useApp, DAILY_FREE_LIMIT } from '../context/AppContext';
+import { usePurchases } from '../context/PurchaseContext';
 import { useColors } from '../context/ColorContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { t } from '../i18n';
@@ -17,6 +18,7 @@ const formatBytes = (b) => _formatBytes(b, '0 B');
 
 export default function StatsScreen() {
   const { state, resetSeenIds } = useApp();
+  const { proProduct, weeklyProduct, purchaseProduct, restorePurchases } = usePurchases();
   const { colors, colorblind, toggle: toggleColorblind, theme, isDark, toggleTheme } = useColors();
   const insets = useSafeAreaInsets();
   const route = useRoute();
@@ -141,21 +143,21 @@ export default function StatsScreen() {
             </Text>
 
             <View style={styles.upgradeOptions}>
-              <TouchableOpacity style={styles.upgradeButton} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.upgradeButton} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.pro')}>
                 <Ionicons name="infinite" size={20} color="#fff" style={{ marginBottom: 4 }} />
                 <Text style={styles.upgradeTitle}>{t('stats.unlimited')}</Text>
-                <Text style={styles.upgradePrice}>{t('stats.oneTimePrice')}</Text>
+                <Text style={styles.upgradePrice}>{proProduct?.price ? `${proProduct.price} ${t('swipe.oneTimeLabel')}` : t('stats.oneTimePrice')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.isDark ? theme.card : theme.bg }]} activeOpacity={0.7}>
+              <TouchableOpacity style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.isDark ? theme.card : theme.bg }]} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.weekly')}>
                 <Ionicons name="refresh" size={20} color={theme.isDark ? '#fff' : '#5856D6'} style={{ marginBottom: 4 }} />
                 <Text style={[styles.upgradeTitle, !theme.isDark && { color: '#5856D6' }]}>{t('stats.weekly')}</Text>
-                <Text style={[styles.upgradePrice, !theme.isDark && { color: 'rgba(88, 86, 214, 0.6)' }]}>{t('stats.weeklyPrice')}</Text>
+                <Text style={[styles.upgradePrice, !theme.isDark && { color: 'rgba(88, 86, 214, 0.6)' }]}>{weeklyProduct?.price ? `${weeklyProduct.price}/${t('swipe.weekLabel')}` : t('stats.weeklyPrice')}</Text>
               </TouchableOpacity>
             </View>
             <Text style={[styles.legalText, { color: theme.textQuaternary }]}>
               {t('stats.legalText')}
             </Text>
-            <TouchableOpacity onPress={() => {}} activeOpacity={0.7} style={styles.restoreButton}>
+            <TouchableOpacity onPress={restorePurchases} activeOpacity={0.7} style={styles.restoreButton}>
               <Text style={styles.restoreText}>{t('stats.restorePurchases')}</Text>
             </TouchableOpacity>
           </View>

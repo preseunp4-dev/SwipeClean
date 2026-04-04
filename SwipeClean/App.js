@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AppProvider } from './src/context/AppContext';
 import { ColorProvider, useColors } from './src/context/ColorContext';
+import { PurchaseProvider } from './src/context/PurchaseContext';
 import SwipeScreen from './src/screens/SwipeScreen';
 import TrashScreen from './src/screens/TrashScreen';
 import DuplicatesScreen from './src/screens/DuplicatesScreen';
@@ -103,6 +104,7 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
     <SafeAreaProvider>
       <ColorProvider>
+      <PurchaseProvider>
       <AppProvider>
         <MainTabs />
         {showOnboarding && (
@@ -112,6 +114,7 @@ export default function App() {
           </View>
         )}
       </AppProvider>
+      </PurchaseProvider>
       </ColorProvider>
     </SafeAreaProvider>
     </GestureHandlerRootView>
