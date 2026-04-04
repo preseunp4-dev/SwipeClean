@@ -12,7 +12,7 @@ import {
   Easing,
   Pressable,
 } from 'react-native';
-import { PanGestureHandler, State, NativeViewGestureHandler, LongPressGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
@@ -218,89 +218,10 @@ export default function TrashScreen() {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [previewIndex, setPreviewIndex] = useState(null);
-  const [previewScrollEnabled, setPreviewScrollEnabled] = useState(true);
-  const [previewZoomed, setPreviewZoomed] = useState(false);
-  const previewListRef = useRef(null);
-  const nativeRef = useRef(null);
-  const panRef = useRef(null);
   const thumbRefs = useRef({});
-  const previewOriginRef = useRef(null);
-  const dismissY = useRef(new Animated.Value(0)).current;
-  const dismissScale = useRef(new Animated.Value(1)).current;
-  const dismissBg = useRef(new Animated.Value(1)).current;
-  const openTx = useRef(new Animated.Value(0)).current;
-  const openTy = useRef(new Animated.Value(0)).current;
-  const dismissActiveRef = useRef(false);
-  const onDismissGesture = useCallback(({ nativeEvent }) => {
-    const { translationY, translationX } = nativeEvent;
-    // Only process dismiss if clearly vertical (not horizontal swipe)
-    if (translationY > 0 && translationY > Math.abs(translationX)) {
-      dismissActiveRef.current = true;
-      dismissY.setValue(translationY);
-      const progress = Math.min(translationY / 300, 1);
-      dismissScale.setValue(1 - progress * 0.3);
-      dismissBg.setValue(1 - progress);
-    }
-  }, []);
 
-  const onDismissStateChange = useCallback(({ nativeEvent }) => {
-    if (nativeEvent.oldState === State.ACTIVE) {
-      if (!dismissActiveRef.current) return;
-      dismissActiveRef.current = false;
-      const { translationY, velocityY } = nativeEvent;
-      if (translationY > 120 || velocityY > 500) {
-        Animated.timing(dismissY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start();
-        Animated.timing(dismissScale, { toValue: 0.5, duration: 250, useNativeDriver: true }).start();
-        Animated.timing(dismissBg, { toValue: 0, duration: 250, useNativeDriver: false }).start();
-        setTimeout(() => {
-          setPreviewIndex(null);
-          setPreviewScrollEnabled(true);
-          requestAnimationFrame(() => {
-            dismissY.setValue(0);
-            dismissScale.setValue(1);
-            dismissBg.setValue(1);
-            openTx.setValue(0);
-            openTy.setValue(0);
-          });
-        }, 260);
-      } else {
-        setPreviewScrollEnabled(true);
-        Animated.spring(dismissY, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }).start();
-        Animated.spring(dismissScale, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true }).start();
-        Animated.timing(dismissBg, { toValue: 1, duration: 150, useNativeDriver: false }).start();
-      }
-    }
-  }, []);
-
-  const openPreview = useCallback((index, origin) => {
-    if (origin) {
-      const originScale = origin.w / SCREEN_WIDTH;
-      const tx = (origin.x + origin.w / 2) - SCREEN_WIDTH / 2;
-      const ty = (origin.y + origin.h / 2) - SCREEN_HEIGHT / 2;
-      dismissScale.setValue(originScale);
-      dismissBg.setValue(0);
-      openTx.setValue(tx);
-      openTy.setValue(ty);
-      previewOriginRef.current = origin;
-    } else {
-      dismissScale.setValue(1);
-      dismissBg.setValue(1);
-      openTx.setValue(0);
-      openTy.setValue(0);
-      previewOriginRef.current = null;
-    }
-    dismissY.setValue(0);
+  const openPreview = useCallback((index) => {
     setPreviewIndex(index);
-    if (origin) {
-      requestAnimationFrame(() => {
-        Animated.parallel([
-          Animated.spring(dismissScale, { toValue: 1, tension: 50, friction: 9, useNativeDriver: true }),
-          Animated.spring(openTx, { toValue: 0, tension: 50, friction: 9, useNativeDriver: true }),
-          Animated.spring(openTy, { toValue: 0, tension: 50, friction: 9, useNativeDriver: true }),
-          Animated.timing(dismissBg, { toValue: 1, duration: 250, useNativeDriver: false }),
-        ]).start();
-      });
-    }
   }, []);
 
   const totalSize = useMemo(() => trashed.reduce((sum, a) => sum + (a.fileSize || 0), 0), [trashed]);
@@ -522,16 +443,7 @@ export default function TrashScreen() {
               ref={(ref) => { if (ref) thumbRefs.current[index] = ref; }}
               style={[styles.thumbContainer, { backgroundColor: theme.card }]}
               activeOpacity={0.7}
-              onPress={selecting ? () => toggleSelect(item.id) : () => {
-                const ref = thumbRefs.current[index];
-                if (ref) {
-                  ref.measureInWindow((x, y, w, h) => {
-                    openPreview(index, { x, y, w, h });
-                  });
-                } else {
-                  openPreview(index, null);
-                }
-              }}
+              onPress={selecting ? () => toggleSelect(item.id) : () => openPreview(index)}
             >
               <Image source={{ uri: item.uri }} style={styles.thumb} contentFit="cover" />
               {item.mediaType === 'video' && (
