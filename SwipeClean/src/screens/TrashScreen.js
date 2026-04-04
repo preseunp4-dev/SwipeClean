@@ -618,57 +618,37 @@ export default function TrashScreen() {
         </View>
       </LinearGradient>
       {/* Fullscreen preview modal */}
-      {previewIndex !== null && (
-        <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
-          <FlatList
-            ref={previewListRef}
-            data={trashed}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={previewIndex}
-            getItemLayout={(_, i) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * i, index: i })}
-            onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-              setPreviewIndex(idx);
-            }}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item, index }) => {
-              const padTop = insets.top + 23;
-              const padBottom = insets.bottom + 6;
-              const availW = SCREEN_WIDTH - 16;
-              const availH = SCREEN_HEIGHT - padTop - padBottom;
-              const aspect = (item.width && item.height) ? item.width / item.height : 3 / 4;
-              let fitW = availW;
-              let fitH = fitW / aspect;
-              if (fitH > availH) {
-                fitH = availH;
-                fitW = fitH * aspect;
-              }
-              return (
-                <View style={[styles.modalPage, { paddingTop: padTop, paddingBottom: padBottom }]}>
-                  {item.mediaType === 'video' ? (
-                    <PreviewVideo uri={item.uri} isActive={index === previewIndex} onScrubStart={() => {}} onScrubEnd={() => {}} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
-                  ) : (
-                    <View style={{ width: fitW, height: fitH, borderRadius: 12, overflow: 'hidden' }}>
-                      <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH }} contentFit="cover" />
-                    </View>
-                  )}
-                </View>
-              );
-            }}
-          />
-          <View style={[styles.modalClose, { top: insets.top + 20 }]} pointerEvents="auto">
-            <TouchableOpacity activeOpacity={0.7} onPress={() => setPreviewIndex(null)}>
-              <Ionicons name="close" size={28} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <View style={[styles.previewCounter, { top: insets.top + 20 }]}>
-            <Text style={styles.previewCounterText}>{previewIndex + 1} / {trashed.length}</Text>
-          </View>
-        </Modal>
-      )}
+      {previewIndex !== null && (() => {
+        const item = trashed[previewIndex];
+        if (!item) return null;
+        const padTop = insets.top + 23;
+        const padBottom = insets.bottom + 6;
+        const availW = SCREEN_WIDTH - 16;
+        const availH = SCREEN_HEIGHT - padTop - padBottom;
+        const aspect = (item.width && item.height) ? item.width / item.height : 3 / 4;
+        let fitW = availW;
+        let fitH = fitW / aspect;
+        if (fitH > availH) { fitH = availH; fitW = fitH * aspect; }
+        return (
+          <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
+            <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', paddingTop: padTop, paddingBottom: padBottom }}>
+              {item.mediaType === 'video' ? (
+                <PreviewVideo uri={item.uri} isActive onScrubStart={() => {}} onScrubEnd={() => {}} videoWidth={item.width} videoHeight={item.height} assetId={item.id} />
+              ) : (
+                <Image source={{ uri: item.uri }} style={{ width: fitW, height: fitH, borderRadius: 12 }} contentFit="cover" />
+              )}
+            </View>
+            <View style={[styles.modalClose, { top: insets.top + 20 }]} pointerEvents="auto">
+              <TouchableOpacity activeOpacity={0.7} onPress={() => setPreviewIndex(null)}>
+                <Ionicons name="close" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.previewCounter, { top: insets.top + 20 }]}>
+              <Text style={styles.previewCounterText}>{previewIndex + 1} / {trashed.length}</Text>
+            </View>
+          </Modal>
+        );
+      })()}
     </View>
   );
 }
