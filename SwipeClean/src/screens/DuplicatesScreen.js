@@ -257,7 +257,7 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
 }
 
 export default function DuplicatesScreen() {
-  const { trashMultiple, markSeen, dispatch } = useApp();
+  const { state, trashMultiple, markSeen, dispatch } = useApp();
   const { colors, theme } = useColors();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState('idle');
@@ -495,11 +495,14 @@ export default function DuplicatesScreen() {
   };
 
   const handleTrashGroup = (group) => {
+    if (state.dailyLimitReached && !state.isPro) {
+      Alert.alert(t('swipe.dailyLimitTitle'), t('swipe.dailyLimitSubtitle', { limit: 200 }));
+      return;
+    }
     const trashIds = group.trashIds || new Set();
     const toTrash = group.assets.filter((a) => trashIds.has(a.id));
     if (toTrash.length === 0) return;
     trashMultiple(toTrash);
-    // Mark kept ones as seen so they don't show in swipe
     const keptIds = group.assets.filter((a) => !trashIds.has(a.id)).map((a) => a.id);
     if (keptIds.length > 0) markSeen(keptIds);
     dispatch({ type: 'INCREMENT_SWIPES', payload: 1 });
@@ -507,7 +510,10 @@ export default function DuplicatesScreen() {
   };
 
   const handleKeepAll = (group) => {
-    // Mark all as seen and dismiss
+    if (state.dailyLimitReached && !state.isPro) {
+      Alert.alert(t('swipe.dailyLimitTitle'), t('swipe.dailyLimitSubtitle', { limit: 200 }));
+      return;
+    }
     markSeen(group.assets.map((a) => a.id));
     dispatch({ type: 'INCREMENT_SWIPES', payload: 1 });
     dismissGroup(group.id);
