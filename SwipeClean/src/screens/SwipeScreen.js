@@ -48,8 +48,9 @@ export default function SwipeScreen() {
   const { state, dispatch, keep, trash, undo, resetSeenIds, resetLimits } = useApp();
   const { proProduct, weeklyProduct, purchaseProduct, restorePurchases, isPro: isProPurchased } = usePurchases();
   const { assets, currentIndex, loading, hasMore, seenIds,
-          dailySwipes, dailyLimitReached, isPro, persistLoaded,
+          dailySwipes, dailyLimitReached, isPro: isProState, persistLoaded,
           totalKept, totalTrashed } = state;
+  const isPro = isProState || isProPurchased;
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [muted, setMuted] = useState(false);
@@ -699,7 +700,12 @@ export default function SwipeScreen() {
 
   const middleRow = (
     <View style={styles.middleRow}>
-      {!isPro && (
+      {isPro ? (
+        <View style={styles.proTagA}>
+          <Ionicons name="star" size={11} color="#FFD60A" />
+          <Text style={[styles.proTextA, { color: '#FFD60A' }]}>Pro</Text>
+        </View>
+      ) : (
         <TouchableOpacity onPress={() => navigation.navigate('Stats', { scrollToUpgrade: true })} activeOpacity={0.7} style={styles.proTagA}>
           <Ionicons name="star" size={11} color="#5856D6" />
           <Text style={styles.proTextA}>{t('swipe.leftUpgrade', { count: swipesLeft })}</Text>

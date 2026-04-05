@@ -23,6 +23,7 @@ import ZoomableImage from '../components/ZoomableImage';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import { useApp } from '../context/AppContext';
+import { usePurchases } from '../context/PurchaseContext';
 import { useColors } from '../context/ColorContext';
 import { loadDismissedGroups, saveDismissedGroups } from '../utils/storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -258,6 +259,7 @@ function ExpandedGallery({ group, initialAssetId, onClose, onToggleTrash, origin
 
 export default function DuplicatesScreen() {
   const { state, trashMultiple, markSeen, dispatch } = useApp();
+  const { isPro: isProPurchased } = usePurchases();
   const { colors, theme } = useColors();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState('idle');
@@ -495,7 +497,7 @@ export default function DuplicatesScreen() {
   };
 
   const handleTrashGroup = (group) => {
-    if (state.dailyLimitReached && !state.isPro) {
+    if (state.dailyLimitReached && !state.isPro && !isProPurchased) {
       Alert.alert(t('swipe.dailyLimitTitle'), t('swipe.dailyLimitSubtitle', { limit: 200 }));
       return;
     }
@@ -510,7 +512,7 @@ export default function DuplicatesScreen() {
   };
 
   const handleKeepAll = (group) => {
-    if (state.dailyLimitReached && !state.isPro) {
+    if (state.dailyLimitReached && !state.isPro && !isProPurchased) {
       Alert.alert(t('swipe.dailyLimitTitle'), t('swipe.dailyLimitSubtitle', { limit: 200 }));
       return;
     }

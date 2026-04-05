@@ -18,14 +18,15 @@ const formatBytes = (b) => _formatBytes(b, '0 B');
 
 export default function StatsScreen() {
   const { state, resetSeenIds } = useApp();
-  const { proProduct, weeklyProduct, purchaseProduct, restorePurchases } = usePurchases();
+  const { proProduct, weeklyProduct, purchaseProduct, restorePurchases, isPro: isProPurchased } = usePurchases();
   const { colors, colorblind, toggle: toggleColorblind, theme, isDark, toggleTheme } = useColors();
   const insets = useSafeAreaInsets();
   const route = useRoute();
   const scrollRef = useRef(null);
   const upgradeY = useRef(0);
-  const { trashed, dailySwipes, isPro, totalSpaceSaved,
+  const { trashed, dailySwipes, isPro: isProState, totalSpaceSaved,
           totalKept, totalTrashed, totalKeptSize, totalLibrarySize } = state;
+  const isPro = isProState || isProPurchased;
 
   const reviewed = totalKept + totalTrashed;
   const remaining = Math.max(0, totalLibrarySize - reviewed);
