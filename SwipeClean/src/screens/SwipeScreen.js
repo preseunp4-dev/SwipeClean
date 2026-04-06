@@ -591,8 +591,8 @@ export default function SwipeScreen() {
     );
   }
 
-  // Daily limit reached — paywall
-  if (dailyLimitReached) {
+  // Daily limit reached — paywall (skip if pro)
+  if (dailyLimitReached && !isPro) {
     return (
       <View style={containerStyle}>
         {filterBar}

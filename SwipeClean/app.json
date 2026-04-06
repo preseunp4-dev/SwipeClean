@@ -13,7 +13,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.pieterpreseun.swipeclean",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "SwipeClean needs access to your photo library so you can swipe through and clean up your photos.",

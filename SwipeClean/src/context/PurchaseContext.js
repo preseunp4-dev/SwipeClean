@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import * as InAppPurchases from 'expo-in-app-purchases';
 
 const PurchaseContext = createContext();
@@ -8,18 +9,32 @@ const PRODUCT_IDS = [
   'com.pieterpreseun.swipeclean.pro',
   'com.pieterpreseun.swipeclean.weekly',
 ];
+const PRO_KEY = 'swipeclean_pro';
+
+const setProStatus = async (value) => {
+  try { await SecureStore.setItemAsync(PRO_KEY, value ? 'true' : 'false'); } catch {}
+};
 
 export function PurchaseProvider({ children }) {
   const [products, setProducts] = useState([]);
-  const [isPro, setIsPro] = useState(false);
+  const [isPro, setIsProState] = useState(false);
   const [loading, setLoading] = useState(true);
   const connectedRef = useRef(false);
+
+  const setIsPro = useCallback((value) => {
+    setIsProState(value);
+    setProStatus(value);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
     const init = async () => {
       try {
+        // Check persisted pro status first
+        const saved = await SecureStore.getItemAsync(PRO_KEY);
+        if (saved === 'true' && mounted) setIsProState(true);
+
         // Connect to the store
         await InAppPurchases.connectAsync();
         connectedRef.current = true;

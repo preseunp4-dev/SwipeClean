@@ -127,6 +127,15 @@ export default function StatsScreen() {
           </Text>
         </View>
 
+        {/* Pro badge */}
+        {isPro && (
+          <View style={[styles.dailyCard, { backgroundColor: theme.card, alignItems: 'center', paddingVertical: 20 }]}>
+            <Ionicons name="star" size={28} color="#FFD60A" style={{ marginBottom: 8 }} />
+            <Text style={[styles.sectionLabel, { color: '#FFD60A', fontSize: sw(18) }]}>SwipeClean Pro</Text>
+            <Text style={[styles.dailyRemaining, { color: theme.textSecondary }]}>Unlimited swipes</Text>
+          </View>
+        )}
+
         {/* Daily swipes card */}
         {!isPro && (
           <View style={[styles.dailyCard, { backgroundColor: theme.card }]} onLayout={(e) => { upgradeY.current = e.nativeEvent.layout.y; }}>
