@@ -701,9 +701,9 @@ export default function SwipeScreen() {
   const middleRow = (
     <View style={styles.middleRow}>
       {isPro ? (
-        <View style={styles.proTagA}>
-          <Ionicons name="star" size={11} color="#FFD60A" />
-          <Text style={[styles.proTextA, { color: '#FFD60A' }]}>Pro</Text>
+        <View style={[styles.proTagA, { backgroundColor: '#FFD60A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }]}>
+          <Ionicons name="star" size={11} color="#000" />
+          <Text style={[styles.proTextA, { color: '#000' }]}>Pro</Text>
         </View>
       ) : (
         <TouchableOpacity onPress={() => navigation.navigate('Stats', { scrollToUpgrade: true })} activeOpacity={0.7} style={styles.proTagA}>
