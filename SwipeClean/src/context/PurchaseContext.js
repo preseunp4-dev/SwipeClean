@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import * as InAppPurchases from 'expo-in-app-purchases';
 
 const PurchaseContext = createContext();
@@ -42,9 +42,6 @@ export function PurchaseProvider({ children }) {
         const { responseCode, results } = await InAppPurchases.getProductsAsync(PRODUCT_IDS);
         if (responseCode === InAppPurchases.IAPResponseCode.OK && results && mounted) {
           setProducts(results);
-          Alert.alert('IAP Debug', `Found ${results.length} products: ${results.map(p => p.productId + ' ' + p.price).join(', ')}`);
-        } else {
-          Alert.alert('IAP Debug', `Failed to load products. Response: ${responseCode}, Results: ${results?.length || 0}`);
         }
 
         // Check for existing purchases
@@ -58,7 +55,7 @@ export function PurchaseProvider({ children }) {
           }
         }
       } catch (err) {
-        Alert.alert('IAP Init Error', err.message);
+        console.warn('IAP init error:', err.message);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -76,10 +73,9 @@ export function PurchaseProvider({ children }) {
 
   const purchaseProduct = useCallback(async (productId) => {
     try {
-      Alert.alert('Purchase', `Attempting to buy: ${productId}`);
       await InAppPurchases.purchaseItemAsync(productId);
     } catch (err) {
-      Alert.alert('Purchase Error', err.message);
+      console.warn('Purchase error:', err.message);
     }
   }, []);
 
