@@ -127,67 +127,62 @@ export default function StatsScreen() {
           </Text>
         </View>
 
-        {/* Pro badge */}
-        {isPro && (
-          <View style={[styles.dailyCard, { backgroundColor: theme.card, alignItems: 'center', paddingVertical: 20 }]}>
-            <Ionicons name="star" size={28} color="#FFD60A" style={{ marginBottom: 8 }} />
-            <Text style={[styles.sectionLabel, { color: '#FFD60A', fontSize: sw(18) }]}>SwipeClean Pro</Text>
-            <Text style={[styles.dailyRemaining, { color: theme.textSecondary }]}>Unlimited swipes</Text>
-          </View>
-        )}
-
         {/* Daily swipes card */}
         <View style={[styles.dailyCard, { backgroundColor: theme.card }]} onLayout={(e) => { upgradeY.current = e.nativeEvent.layout.y; }}>
-          {isPro ? (
+          <View style={styles.dailyHeader}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>{t('stats.dailySwipes')}</Text>
+            <Text style={styles.dailyCount}>
+              {isPro ? '∞' : `${dailySwipes} / ${DAILY_FREE_LIMIT}`}
+            </Text>
+          </View>
+          {!isPro && (
             <>
-              <View style={styles.upgradeOptions}>
-                <View style={[styles.upgradeButton, { opacity: 0.6 }]}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4CD964" style={{ marginBottom: 4 }} />
-                  <Text style={[styles.upgradeTitle, { color: '#fff' }]}>{t('stats.unlimited')}</Text>
-                  <Text style={styles.upgradePrice}>Purchased</Text>
-                </View>
-                <View style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.isDark ? theme.card : theme.bg, opacity: 0.6 }]}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4CD964" style={{ marginBottom: 4 }} />
-                  <Text style={[styles.upgradeTitle, !theme.isDark && { color: '#5856D6' }]}>{t('stats.weekly')}</Text>
-                  <Text style={[styles.upgradePrice, !theme.isDark && { color: 'rgba(88, 86, 214, 0.6)' }]}>Active</Text>
-                </View>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.dailyHeader}>
-                <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>{t('stats.dailySwipes')}</Text>
-                <Text style={styles.dailyCount}>
-                  {dailySwipes} / {DAILY_FREE_LIMIT}
-                </Text>
-              </View>
               <View style={[styles.dailyBarBg, { backgroundColor: theme.border }]}>
                 <View style={[styles.dailyBarFill, { width: `${swipePercent}%` }]} />
               </View>
               <Text style={[styles.dailyRemaining, { color: theme.textSecondary }]}>
                 {t('stats.swipesRemaining', { count: swipesRemaining })}
               </Text>
-
-              <View style={styles.upgradeOptions}>
-                <TouchableOpacity style={styles.upgradeButton} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.pro')}>
-                  <Ionicons name="infinite" size={20} color="#fff" style={{ marginBottom: 4 }} />
-                  <Text style={styles.upgradeTitle}>{t('stats.unlimited')}</Text>
-                  <Text style={styles.upgradePrice}>{proProduct?.price ? `${proProduct.price} ${t('swipe.oneTimeLabel')}` : t('stats.oneTimePrice')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.isDark ? theme.card : theme.bg }]} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.weekly')}>
-                  <Ionicons name="refresh" size={20} color={theme.isDark ? '#fff' : '#5856D6'} style={{ marginBottom: 4 }} />
-                  <Text style={[styles.upgradeTitle, !theme.isDark && { color: '#5856D6' }]}>{t('stats.weekly')}</Text>
-                  <Text style={[styles.upgradePrice, !theme.isDark && { color: 'rgba(88, 86, 214, 0.6)' }]}>{weeklyProduct?.price ? `${weeklyProduct.price}/${t('swipe.weekLabel')}` : t('stats.weeklyPrice')}</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={[styles.legalText, { color: theme.textQuaternary }]}>
-                {t('stats.legalText')}
-              </Text>
-              <TouchableOpacity onPress={restorePurchases} activeOpacity={0.7} style={styles.restoreButton}>
-                <Text style={styles.restoreText}>{t('stats.restorePurchases')}</Text>
-              </TouchableOpacity>
             </>
           )}
+          {isPro && (
+            <Text style={[styles.dailyRemaining, { color: '#4CD964' }]}>Unlimited swipes</Text>
+          )}
+
+          <View style={styles.upgradeOptions}>
+            {isPro ? (
+              <View style={[styles.upgradeButton, { opacity: 0.7 }]}>
+                <Ionicons name="checkmark-circle" size={20} color="#4CD964" style={{ marginBottom: 4 }} />
+                <Text style={[styles.upgradeTitle, { color: '#fff' }]}>{t('stats.unlimited')}</Text>
+                <Text style={styles.upgradePrice}>Purchased</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.upgradeButton} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.pro')}>
+                <Ionicons name="infinite" size={20} color="#fff" style={{ marginBottom: 4 }} />
+                <Text style={styles.upgradeTitle}>{t('stats.unlimited')}</Text>
+                <Text style={styles.upgradePrice}>{proProduct?.price ? `${proProduct.price} ${t('swipe.oneTimeLabel')}` : t('stats.oneTimePrice')}</Text>
+              </TouchableOpacity>
+            )}
+            {isPro ? (
+              <View style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.isDark ? theme.card : theme.bg, opacity: 0.7 }]}>
+                <Ionicons name="checkmark-circle" size={20} color="#4CD964" style={{ marginBottom: 4 }} />
+                <Text style={[styles.upgradeTitle, !theme.isDark && { color: '#5856D6' }]}>{t('stats.weekly')}</Text>
+                <Text style={[styles.upgradePrice, !theme.isDark && { color: 'rgba(88, 86, 214, 0.6)' }]}>Active</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={[styles.upgradeButton, styles.subscribeButton, { backgroundColor: theme.isDark ? theme.card : theme.bg }]} activeOpacity={0.7} onPress={() => purchaseProduct('com.pieterpreseun.swipeclean.weekly')}>
+                <Ionicons name="refresh" size={20} color={theme.isDark ? '#fff' : '#5856D6'} style={{ marginBottom: 4 }} />
+                <Text style={[styles.upgradeTitle, !theme.isDark && { color: '#5856D6' }]}>{t('stats.weekly')}</Text>
+                <Text style={[styles.upgradePrice, !theme.isDark && { color: 'rgba(88, 86, 214, 0.6)' }]}>{weeklyProduct?.price ? `${weeklyProduct.price}/${t('swipe.weekLabel')}` : t('stats.weeklyPrice')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={[styles.legalText, { color: theme.textQuaternary }]}>
+            {t('stats.legalText')}
+          </Text>
+          <TouchableOpacity onPress={restorePurchases} activeOpacity={0.7} style={styles.restoreButton}>
+            <Text style={styles.restoreText}>{t('stats.restorePurchases')}</Text>
+          </TouchableOpacity>
         </View>
         {/* Reset seen photos */}
         <TouchableOpacity
