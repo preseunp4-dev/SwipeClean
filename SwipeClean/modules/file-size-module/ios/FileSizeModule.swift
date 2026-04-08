@@ -5,79 +5,236 @@ public class FileSizeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("FileSizeModule")
 
+    // --- Existing: get file sizes for specific IDs ---
     AsyncFunction("getFileSizes") { (localIdentifiers: [String]) -> [[String: Any]] in
       let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: localIdentifiers, options: nil)
       var results: [[String: Any]] = []
-
       for i in 0..<fetchResult.count {
         let asset = fetchResult.object(at: i)
         let resources = PHAssetResource.assetResources(for: asset)
-
         var totalSize: Int64 = 0
         for resource in resources {
-          if let size = resource.value(forKey: "fileSize") as? Int64 {
-            totalSize += size
+          if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
+        }
+        results.append(["id": asset.localIdentifier, "fileSize": totalSize])
+      }
+      return results
+    }
+
+    // --- Existing: get all assets sorted by size ---
+    AsyncFunction("getAllFileSizesSorted") { (mediaTypes: [Int]) -> [[String: Any]] in
+      var allAssets: [(id: String, size: Int64)] = []
+      for mediaType in mediaTypes {
+        let type: PHAssetMediaType = mediaType == 1 ? .image : .video
+        let options = PHFetchOptions()
+        let fetchResult = PHAsset.fetchAssets(with: type, options: options)
+        for i in 0..<fetchResult.count {
+          let asset = fetchResult.object(at: i)
+          let resources = PHAssetResource.assetResources(for: asset)
+          var totalSize: Int64 = 0
+          for resource in resources {
+            if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
+          }
+          if totalSize > 0 {
+            allAssets.append((id: asset.localIdentifier, size: totalSize))
+          } else {
+            let pixels = Int64(asset.pixelWidth) * Int64(asset.pixelHeight)
+            let estimated = asset.mediaType == .video ? pixels * Int64(max(asset.duration, 1)) * 2 : pixels * 3
+            if estimated > 0 { allAssets.append((id: asset.localIdentifier, size: estimated)) }
           }
         }
+      }
+      allAssets.sort { $0.size > $1.size }
+      return Array(allAssets.prefix(500)).map { ["id": $0.id, "fileSize": $0.size] }
+    }
 
-        results.append([
-          "id": asset.localIdentifier,
-          "fileSize": totalSize
-        ])
+    // --- NEW #1: Get largest unseen assets (filtering done natively) ---
+    AsyncFunction("getLargestUnseen") { (seenIds: [String], mediaTypes: [Int], limit: Int) -> [[String: Any]] in
+      let seenSet = Set(seenIds)
+      var allAssets: [(id: String, size: Int64)] = []
+
+      for mediaType in mediaTypes {
+        let type: PHAssetMediaType = mediaType == 1 ? .image : .video
+        let fetchResult = PHAsset.fetchAssets(with: type, options: nil)
+        for i in 0..<fetchResult.count {
+          let asset = fetchResult.object(at: i)
+          if seenSet.contains(asset.localIdentifier) { continue }
+          let resources = PHAssetResource.assetResources(for: asset)
+          var totalSize: Int64 = 0
+          for resource in resources {
+            if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
+          }
+          if totalSize > 0 {
+            allAssets.append((id: asset.localIdentifier, size: totalSize))
+          } else {
+            let pixels = Int64(asset.pixelWidth) * Int64(asset.pixelHeight)
+            let estimated = asset.mediaType == .video ? pixels * Int64(max(asset.duration, 1)) * 2 : pixels * 3
+            if estimated > 0 { allAssets.append((id: asset.localIdentifier, size: estimated)) }
+          }
+        }
+      }
+
+      allAssets.sort { $0.size > $1.size }
+      return Array(allAssets.prefix(limit)).map { ["id": $0.id, "fileSize": $0.size] }
+    }
+
+    // --- NEW #2: Get all assets in one native call (parallel loading) ---
+    AsyncFunction("getAllAssetsNative") { (mediaTypes: [Int]) -> [[String: Any]] in
+      var results: [[String: Any]] = []
+
+      for mediaType in mediaTypes {
+        let type: PHAssetMediaType = mediaType == 1 ? .image : .video
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        let fetchResult = PHAsset.fetchAssets(with: type, options: options)
+
+        for i in 0..<fetchResult.count {
+          let asset = fetchResult.object(at: i)
+          // Get file size from metadata
+          let resources = PHAssetResource.assetResources(for: asset)
+          var totalSize: Int64 = 0
+          for resource in resources {
+            if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
+          }
+
+          results.append([
+            "id": asset.localIdentifier,
+            "mediaType": asset.mediaType == .image ? "photo" : "video",
+            "width": asset.pixelWidth,
+            "height": asset.pixelHeight,
+            "creationTime": asset.creationDate?.timeIntervalSince1970 ?? 0,
+            "duration": asset.duration,
+            "fileSize": totalSize,
+            "uri": "ph://\(asset.localIdentifier)"
+          ])
+        }
       }
 
       return results
     }
 
-    AsyncFunction("getAllFileSizesSorted") { (mediaTypes: [Int]) -> [[String: Any]] in
-      // Process in batches to avoid blocking the main thread for too long
-      var allAssetsWithSize: [(id: String, size: Int64)] = []
+    // --- NEW #3: Find duplicate groups natively ---
+    AsyncFunction("findDuplicateGroups") { (mediaTypes: [Int], timeWindowMs: Int, minSizeRatio: Double) -> [[String: Any]] in
+      // Fetch all assets sorted by creation time
+      var allAssets: [(id: String, time: Double, width: Int, height: Int, size: Int64, mediaType: String, duration: Double, uri: String)] = []
 
       for mediaType in mediaTypes {
         let type: PHAssetMediaType = mediaType == 1 ? .image : .video
         let options = PHFetchOptions()
-        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
         let fetchResult = PHAsset.fetchAssets(with: type, options: options)
 
-        // Process in batches of 200
-        let batchSize = 200
-        for batchStart in stride(from: 0, to: fetchResult.count, by: batchSize) {
-          let batchEnd = min(batchStart + batchSize, fetchResult.count)
-          for i in batchStart..<batchEnd {
-            let asset = fetchResult.object(at: i)
-            let resources = PHAssetResource.assetResources(for: asset)
-            var totalSize: Int64 = 0
-            for resource in resources {
-              if let size = resource.value(forKey: "fileSize") as? Int64 {
-                totalSize += size
-              }
-            }
-            // Include even iCloud assets — estimate from pixel dimensions if no local size
-            if totalSize > 0 {
-              allAssetsWithSize.append((id: asset.localIdentifier, size: totalSize))
-            } else {
-              // Estimate: ~3 bytes per pixel for photos, ~10 bytes per pixel per second for video
-              let pixels = Int64(asset.pixelWidth) * Int64(asset.pixelHeight)
-              let estimated: Int64
-              if asset.mediaType == .video {
-                estimated = pixels * Int64(max(asset.duration, 1)) * 2
-              } else {
-                estimated = pixels * 3
-              }
-              if estimated > 0 {
-                allAssetsWithSize.append((id: asset.localIdentifier, size: estimated))
-              }
-            }
+        for i in 0..<fetchResult.count {
+          let asset = fetchResult.object(at: i)
+          let resources = PHAssetResource.assetResources(for: asset)
+          var totalSize: Int64 = 0
+          for resource in resources {
+            if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
           }
+          allAssets.append((
+            id: asset.localIdentifier,
+            time: (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000, // ms
+            width: asset.pixelWidth,
+            height: asset.pixelHeight,
+            size: totalSize,
+            mediaType: asset.mediaType == .image ? "photo" : "video",
+            duration: asset.duration,
+            uri: "ph://\(asset.localIdentifier)"
+          ))
         }
       }
 
-      // Sort by size descending
-      allAssetsWithSize.sort { $0.size > $1.size }
+      // Sort by creation time
+      allAssets.sort { $0.time < $1.time }
 
-      // Return top 500
-      let top = allAssetsWithSize.prefix(500)
-      return top.map { ["id": $0.id, "fileSize": $0.size] }
+      let timeWindow = Double(timeWindowMs)
+      var used = Set<String>()
+      var groups: [[String: Any]] = []
+      var groupId = 0
+
+      // Burst detection with sliding window
+      var windowStart = 0
+      for i in 0..<allAssets.count {
+        while windowStart < i && allAssets[i].time - allAssets[windowStart].time > timeWindow {
+          windowStart += 1
+        }
+        if used.contains(allAssets[i].id) { continue }
+        var cluster: [Int] = [i]
+        used.insert(allAssets[i].id)
+
+        for j in windowStart..<allAssets.count {
+          if j == i { continue }
+          if allAssets[j].time - allAssets[i].time > timeWindow { break }
+          if used.contains(allAssets[j].id) { continue }
+          if allAssets[j].width == allAssets[i].width && allAssets[j].height == allAssets[i].height {
+            // File size similarity check
+            let sizeA = allAssets[i].size
+            let sizeB = allAssets[j].size
+            if sizeA > 0 && sizeB > 0 {
+              let ratio = Double(min(sizeA, sizeB)) / Double(max(sizeA, sizeB))
+              if ratio < minSizeRatio { continue }
+            }
+            cluster.append(j)
+            used.insert(allAssets[j].id)
+          }
+        }
+
+        if cluster.count >= 2 {
+          let assets: [[String: Any]] = cluster.map { idx in
+            let a = allAssets[idx]
+            return [
+              "id": a.id,
+              "mediaType": a.mediaType,
+              "width": a.width,
+              "height": a.height,
+              "creationTime": a.time / 1000, // back to seconds
+              "duration": a.duration,
+              "fileSize": a.size,
+              "uri": a.uri
+            ]
+          }
+          groups.append([
+            "id": "group-\(groupId)",
+            "type": "burst",
+            "assets": assets
+          ])
+          groupId += 1
+        }
+      }
+
+      // Exact duplicates (same file size + dimensions, not in burst groups)
+      let remaining = allAssets.filter { !used.contains($0.id) }
+      var sizeMap: [String: [Int]] = [:]
+      for (idx, asset) in remaining.enumerated() {
+        if asset.size <= 0 { continue }
+        let key = "\(asset.size)_\(asset.width)x\(asset.height)"
+        sizeMap[key, default: []].append(idx)
+      }
+
+      for (_, indices) in sizeMap {
+        if indices.count < 2 { continue }
+        let assets: [[String: Any]] = indices.map { idx in
+          let a = remaining[idx]
+          return [
+            "id": a.id,
+            "mediaType": a.mediaType,
+            "width": a.width,
+            "height": a.height,
+            "creationTime": a.time / 1000,
+            "duration": a.duration,
+            "fileSize": a.size,
+            "uri": a.uri
+          ]
+        }
+        groups.append([
+          "id": "group-\(groupId)",
+          "type": "exact",
+          "assets": assets
+        ])
+        groupId += 1
+      }
+
+      return groups
     }
   }
 }

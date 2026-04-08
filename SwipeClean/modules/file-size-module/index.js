@@ -7,27 +7,42 @@ try {
   // Not available (Expo Go) — fallback will be used
 }
 
-/**
- * Get file sizes for specific asset IDs.
- * Returns array of { id, fileSize }.
- * iOS: PHAssetResource metadata. Android: MediaStore SIZE column. Both instant.
- */
 export async function getFileSizes(localIdentifiers) {
   if (!nativeModule) return [];
   return nativeModule.getFileSizes(localIdentifiers);
 }
 
-/**
- * Get ALL assets sorted by file size (largest first).
- * Returns top 500 as array of { id, fileSize }.
- * mediaTypes: [1] = photos, [2] = videos, [1, 2] = both
- */
 export async function getAllFileSizesSorted(mediaTypes = [1, 2]) {
   if (!nativeModule) return [];
   return nativeModule.getAllFileSizesSorted(mediaTypes);
 }
 
 /**
- * Check if native module is available.
+ * Get largest unseen assets — filtering and sorting done natively.
+ * seenIds: array of asset IDs to exclude
+ * Returns array of { id, fileSize } sorted by size descending.
  */
+export async function getLargestUnseen(seenIds, mediaTypes = [1, 2], limit = 200) {
+  if (!nativeModule) return [];
+  return nativeModule.getLargestUnseen(seenIds, mediaTypes, limit);
+}
+
+/**
+ * Get all assets in one native call — no JS bridge overhead per page.
+ * Returns array of { id, mediaType, width, height, creationTime, duration, fileSize, uri }.
+ */
+export async function getAllAssetsNative(mediaTypes = [1, 2]) {
+  if (!nativeModule) return [];
+  return nativeModule.getAllAssetsNative(mediaTypes);
+}
+
+/**
+ * Find duplicate groups natively — burst detection + exact duplicates.
+ * Returns array of { id, type, assets: [{ id, mediaType, width, height, creationTime, duration, fileSize, uri }] }.
+ */
+export async function findDuplicateGroups(mediaTypes = [1, 2], timeWindowMs = 5000, minSizeRatio = 0.5) {
+  if (!nativeModule) return [];
+  return nativeModule.findDuplicateGroups(mediaTypes, timeWindowMs, minSizeRatio);
+}
+
 export const isAvailable = nativeModule != null;

@@ -12,7 +12,7 @@ import MilestoneOverlay from '../components/MilestoneOverlay';
 import { t } from '../i18n';
 import { useColors } from '../context/ColorContext';
 import * as Sharing from 'expo-sharing';
-import { getAllFileSizesSorted, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
+import { getAllFileSizesSorted, getLargestUnseen, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
 import { loadFileSizeCache, saveFileSizeCache } from '../utils/storage';
 import { sw } from '../utils/scale';
 
@@ -192,25 +192,15 @@ export default function SwipeScreen() {
           batch = unseen.sort((a, b) => b.creationTime - a.creationTime).slice(0, PAGE_SIZE);
         } else if (filter === 'largest') {
           if (fileSizeModuleAvailable) {
-            // Native module: get ALL assets sorted by real file size via PHAssetResource
-            const sorted = await getAllFileSizesSorted([1, 2]); // photos + videos
-            // Build a lookup of id -> fileSize
-            const sizeMap = {};
-            for (const item of sorted) {
-              sizeMap[item.id] = item.fileSize;
-            }
-            // Match with unseen assets and apply real sizes (without mutating originals)
+            // Native module: get largest unseen assets — filtering + sorting all done natively
+            const seenArray = [...idsToSkip];
+            const sorted = await getLargestUnseen(seenArray, [1, 2], PAGE_SIZE);
+            // Match with unseen assets to get full asset objects
             const unseenMap = {};
             for (const a of unseen) unseenMap[a.id] = a;
-            const matched = [];
-            for (const item of sorted) {
-              const asset = unseenMap[item.id];
-              if (asset) {
-                matched.push({ ...asset, fileSize: item.fileSize });
-              }
-              if (matched.length >= PAGE_SIZE) break;
-            }
-            batch = matched;
+            batch = sorted
+              .filter((item) => unseenMap[item.id])
+              .map((item) => ({ ...unseenMap[item.id], fileSize: item.fileSize }));
           } else {
             // Fallback: use cached sizes if available, fetch only what's missing
             const unseenWithCache = unseen.map((a) => {

@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '../i18n';
 import { sw, sh } from '../utils/scale';
 import { analyzePhotos, isAvailable as photoQualityAvailable } from '../../modules/photo-quality-module';
+import { findDuplicateGroups as findDuplicateGroupsNative, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -295,107 +296,69 @@ export default function DuplicatesScreen() {
         return;
       }
 
-      let allAssets = [];
+      let foundGroups = [];
 
-      // Photos
-      let hasMore = true;
-      let cursor = undefined;
-      while (hasMore) {
-        const page = await MediaLibrary.getAssetsAsync({
-          first: 500,
-          after: cursor,
-          mediaType: MediaLibrary.MediaType.photo,
-          sortBy: [MediaLibrary.SortBy.creationTime],
-        });
-        allAssets.push(...page.assets);
-        hasMore = page.hasNextPage;
-        if (page.assets.length > 0) cursor = page.assets[page.assets.length - 1].id;
-        setProgress({ loaded: allAssets.length, total: 0 });
-      }
-
-      // Videos
-      hasMore = true;
-      cursor = undefined;
-      while (hasMore) {
-        const page = await MediaLibrary.getAssetsAsync({
-          first: 500,
-          after: cursor,
-          mediaType: MediaLibrary.MediaType.video,
-          sortBy: [MediaLibrary.SortBy.creationTime],
-        });
-        allAssets.push(...page.assets);
-        hasMore = page.hasNextPage;
-        if (page.assets.length > 0) cursor = page.assets[page.assets.length - 1].id;
-        setProgress({ loaded: allAssets.length, total: 0 });
-      }
-
-      setProgress({ loaded: allAssets.length, total: allAssets.length });
-      allAssets.sort((a, b) => a.creationTime - b.creationTime);
-
-      const used = new Set();
-      const foundGroups = [];
-      let groupIdCounter = 0;
-
-      // Burst detection — O(n) sliding window (assets already sorted by creationTime)
-      let windowStart = 0;
-      for (let i = 0; i < allAssets.length; i++) {
-        // Advance window start past assets that are too old
-        while (windowStart < i && allAssets[i].creationTime - allAssets[windowStart].creationTime > TIME_WINDOW_MS) {
-          windowStart++;
+      if (fileSizeModuleAvailable) {
+        // NATIVE path — all scanning done in Swift/Kotlin, 10-50x faster
+        setProgress({ loaded: 0, total: 0 });
+        const nativeGroups = await findDuplicateGroupsNative([1, 2], TIME_WINDOW_MS, 0.5);
+        foundGroups = nativeGroups.map((g) => ({
+          ...g,
+          trashIds: new Set(),
+        }));
+        setProgress({ loaded: foundGroups.length, total: foundGroups.length });
+      } else {
+        // JS fallback for Expo Go
+        let allAssets = [];
+        let hasMore = true;
+        let cursor = undefined;
+        while (hasMore) {
+          const page = await MediaLibrary.getAssetsAsync({
+            first: 500, after: cursor, mediaType: MediaLibrary.MediaType.photo,
+            sortBy: [MediaLibrary.SortBy.creationTime],
+          });
+          allAssets.push(...page.assets);
+          hasMore = page.hasNextPage;
+          if (page.assets.length > 0) cursor = page.assets[page.assets.length - 1].id;
+          setProgress({ loaded: allAssets.length, total: 0 });
         }
-        if (used.has(allAssets[i].id)) continue;
-        const cluster = [allAssets[i]];
-        used.add(allAssets[i].id);
+        hasMore = true; cursor = undefined;
+        while (hasMore) {
+          const page = await MediaLibrary.getAssetsAsync({
+            first: 500, after: cursor, mediaType: MediaLibrary.MediaType.video,
+            sortBy: [MediaLibrary.SortBy.creationTime],
+          });
+          allAssets.push(...page.assets);
+          hasMore = page.hasNextPage;
+          if (page.assets.length > 0) cursor = page.assets[page.assets.length - 1].id;
+          setProgress({ loaded: allAssets.length, total: 0 });
+        }
+        setProgress({ loaded: allAssets.length, total: allAssets.length });
+        allAssets.sort((a, b) => a.creationTime - b.creationTime);
 
-        for (let j = windowStart; j < allAssets.length; j++) {
-          if (j === i) continue;
-          if (allAssets[j].creationTime - allAssets[i].creationTime > TIME_WINDOW_MS) break;
-          if (used.has(allAssets[j].id)) continue;
-          if (
-            allAssets[j].width === allAssets[i].width &&
-            allAssets[j].height === allAssets[i].height
-          ) {
-            // File size similarity check — burst photos have similar sizes
-            // WhatsApp/saved photos of different scenes don't
-            const sizeA = allAssets[i].fileSize || 0;
-            const sizeB = allAssets[j].fileSize || 0;
-            if (sizeA > 0 && sizeB > 0) {
-              const ratio = Math.min(sizeA, sizeB) / Math.max(sizeA, sizeB);
-              if (ratio < 0.5) continue; // More than 2x size difference — not a burst
+        const used = new Set();
+        let groupIdCounter = 0;
+        let windowStart = 0;
+        for (let i = 0; i < allAssets.length; i++) {
+          while (windowStart < i && allAssets[i].creationTime - allAssets[windowStart].creationTime > TIME_WINDOW_MS) windowStart++;
+          if (used.has(allAssets[i].id)) continue;
+          const cluster = [allAssets[i]]; used.add(allAssets[i].id);
+          for (let j = windowStart; j < allAssets.length; j++) {
+            if (j === i) continue;
+            if (allAssets[j].creationTime - allAssets[i].creationTime > TIME_WINDOW_MS) break;
+            if (used.has(allAssets[j].id)) continue;
+            if (allAssets[j].width === allAssets[i].width && allAssets[j].height === allAssets[i].height) {
+              const sizeA = allAssets[i].fileSize || 0, sizeB = allAssets[j].fileSize || 0;
+              if (sizeA > 0 && sizeB > 0 && Math.min(sizeA, sizeB) / Math.max(sizeA, sizeB) < 0.5) continue;
+              cluster.push(allAssets[j]); used.add(allAssets[j].id);
             }
-            cluster.push(allAssets[j]);
-            used.add(allAssets[j].id);
           }
+          if (cluster.length >= 2) foundGroups.push({ id: `group-${groupIdCounter++}`, type: 'burst', assets: cluster, trashIds: new Set() });
         }
-
-        if (cluster.length >= 2) {
-          foundGroups.push({
-            id: `group-${groupIdCounter++}`,
-            type: 'burst',
-            assets: cluster,
-            trashIds: new Set(),
-          });
-        }
-      }
-
-      // Exact duplicates
-      const remaining = allAssets.filter((a) => !used.has(a.id));
-      const sizeMap = new Map();
-      for (const a of remaining) {
-        if (!a.fileSize || a.fileSize === 0) continue;
-        const key = `${a.fileSize}_${a.width}x${a.height}`;
-        if (!sizeMap.has(key)) sizeMap.set(key, []);
-        sizeMap.get(key).push(a);
-      }
-      for (const [, assets] of sizeMap) {
-        if (assets.length >= 2) {
-          foundGroups.push({
-            id: `group-${groupIdCounter++}`,
-            type: 'duplicate',
-            assets,
-            trashIds: new Set(),
-          });
-        }
+        const remaining = allAssets.filter((a) => !used.has(a.id));
+        const sizeMap = new Map();
+        for (const a of remaining) { if (!a.fileSize || a.fileSize === 0) continue; const key = `${a.fileSize}_${a.width}x${a.height}`; if (!sizeMap.has(key)) sizeMap.set(key, []); sizeMap.get(key).push(a); }
+        for (const [, assets] of sizeMap) { if (assets.length >= 2) foundGroups.push({ id: `group-${groupIdCounter++}`, type: 'duplicate', assets, trashIds: new Set() }); }
       }
 
       // Filter out previously dismissed groups
