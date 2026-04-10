@@ -103,6 +103,7 @@ export default function StatsScreen() {
               <Text style={[styles.spaceSavedLabel, { color: theme.textSecondary }]}>{t('stats.spaceSaved')}</Text>
             </View>
           </View>
+          <Text style={[styles.icloudNote, { color: theme.textQuaternary }]}>Actual savings may vary with iCloud Photos enabled</Text>
 
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
@@ -210,15 +211,6 @@ export default function StatsScreen() {
         >
           <Ionicons name="play-outline" size={18} color={theme.textSecondary} style={{ marginRight: 8 }} />
           <Text style={[styles.testOnboardingText, { color: theme.textSecondary }]}>{t('stats.howItWorks')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleTestOnboardingV2}
-          style={[styles.testOnboardingButton, { borderColor: theme.border }]}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="phone-portrait-outline" size={18} color={theme.textSecondary} style={{ marginRight: 8 }} />
-          <Text style={[styles.testOnboardingText, { color: theme.textSecondary }]}>{t('stats.howItWorks')} V2</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -442,6 +434,12 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: sw(12),
     marginTop: 2,
+  },
+  icloudNote: {
+    fontSize: sw(10),
+    textAlign: 'center',
+    marginTop: 6,
+    fontStyle: 'italic',
   },
   resetSeenButton: {
     flexDirection: 'row',

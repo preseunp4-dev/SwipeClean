@@ -1021,8 +1021,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    width: '50%',
     marginTop: 12,
     paddingVertical: 10,
     borderRadius: 10,
