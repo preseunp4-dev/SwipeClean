@@ -363,7 +363,7 @@ export default function SwipeScreen() {
       const idsToSkip = new Set(seenIdsRef.current);
       for (const a of assetsRef.current || []) idsToSkip.add(a.id);
       const cached = allAssetsCache.current;
-      const PREFETCH_SIZE = 25;
+      const PREFETCH_SIZE = PAGE_SIZE; // Full 200 — all from cached data, instant
 
       const filters = ['oldest', 'newest', 'all', 'largest', 'photos', 'videos'];
       for (const f of filters) {
