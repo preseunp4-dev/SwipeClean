@@ -268,6 +268,7 @@ export default function DuplicatesScreen() {
   const [groups, setGroups] = useState([]);
   const [dismissedKeys, setDismissedKeys] = useState(new Set());
   const [expanded, setExpanded] = useState(null); // { groupId, assetId, origin }
+  const expandedGroupRef = useRef(null);
   const thumbRefs = useRef({});
 
   // Load dismissed groups and auto-scan on mount
@@ -372,6 +373,7 @@ export default function DuplicatesScreen() {
         const FIRST_BATCH = 25;
         const NEXT_BATCH = 50;
         let processed = 0;
+        const analyzedGroups = [];
 
         const analyzeGroup = async (group) => {
           try {
@@ -394,28 +396,36 @@ export default function DuplicatesScreen() {
           } catch (e) { /* skip */ }
         };
 
+        setProgress({ loaded: 0, total: visibleGroups.length });
+
         // First batch: analyze 25 groups, then show them
         const firstEnd = Math.min(FIRST_BATCH, visibleGroups.length);
-        setProgress({ loaded: 0, total: visibleGroups.length });
         for (let i = 0; i < firstEnd; i++) {
           await analyzeGroup(visibleGroups[i]);
+          analyzedGroups.push(visibleGroups[i]);
           processed++;
           setProgress({ loaded: processed, total: visibleGroups.length });
         }
-        setGroups(visibleGroups.slice(0, firstEnd));
+        setGroups([...analyzedGroups]);
         setPhase('done');
 
-        // Remaining batches: analyze 50 at a time, append when done
+        // Remaining batches: analyze 50 at a time, append when batch is complete
         let batchStart = firstEnd;
         while (batchStart < visibleGroups.length) {
           const batchEnd = Math.min(batchStart + NEXT_BATCH, visibleGroups.length);
+          const batchGroups = [];
           for (let i = batchStart; i < batchEnd; i++) {
             await analyzeGroup(visibleGroups[i]);
+            batchGroups.push(visibleGroups[i]);
             processed++;
             setProgress({ loaded: processed, total: visibleGroups.length });
           }
-          setGroups((prev) => [...prev, ...visibleGroups.slice(batchStart, batchEnd)]);
+          // Use functional update to avoid stale state
+          const newBatch = [...batchGroups];
+          setGroups((prev) => [...prev, ...newBatch]);
           batchStart = batchEnd;
+          // Small delay to let React render the update
+          await new Promise((r) => setTimeout(r, 50));
         }
         setProgress({ loaded: visibleGroups.length, total: visibleGroups.length });
       } else {
@@ -580,6 +590,7 @@ export default function DuplicatesScreen() {
                       key={asset.id}
                       ref={(ref) => { if (ref) thumbRefs.current[asset.id] = ref; }}
                       onPress={() => {
+                        expandedGroupRef.current = group;
                         const ref = thumbRefs.current[asset.id];
                         if (ref) {
                           ref.measureInWindow((x, y, w, h) => {
@@ -646,7 +657,7 @@ export default function DuplicatesScreen() {
       <Modal visible={!!expanded} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(null)}>
         <GestureHandlerRootView style={{ flex: 1 }}>
         {expanded && (() => {
-          const group = groups.find((g) => g.id === expanded.groupId);
+          const group = expandedGroupRef.current;
           if (!group) { setExpanded(null); return null; }
           return (
             <ExpandedGallery
