@@ -12,7 +12,7 @@ import MilestoneOverlay from '../components/MilestoneOverlay';
 import { t } from '../i18n';
 import { useColors } from '../context/ColorContext';
 import * as Sharing from 'expo-sharing';
-import { getAllFileSizesSorted, getLargestUnseen, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
+import { getAllFileSizesSorted, getLargestUnseen, getAllAssetsNative, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
 import { loadFileSizeCache, saveFileSizeCache } from '../utils/storage';
 import { sw } from '../utils/scale';
 
@@ -64,6 +64,7 @@ export default function SwipeScreen() {
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const loadIdRef = useRef(0);
   const allAssetIdsRef = useRef(null); // All library asset IDs for background preload
+  const allAssetsCache = useRef(null); // Cached native assets — avoids re-fetching 100K items
   const bgPreloadRef = useRef(null);   // Background preload cancel token
   const filterLoadingRef = useRef(false); // True while a filter load is fetching file sizes
   const isFocused = useIsFocused();
@@ -123,62 +124,88 @@ export default function SwipeScreen() {
 
         // Collect ALL asset IDs from the entire library (metadata only, fast)
         let allAssets = [];
-        let cursor = undefined;
-        let hasNext = true;
         const loadPhotos = filter !== 'videos';
         const loadVideos = filter !== 'screenshots' && filter !== 'photos';
         let libraryTotal = 0;
         setLoadProgress({ loaded: 0, total: 0 });
         progressAnim.setValue(0);
-        let knownTotal = 0;
 
-        if (loadPhotos) {
-          cursor = undefined; hasNext = true;
-          while (hasNext) {
-            if (myLoadId !== loadIdRef.current) return;
-            const opts = {
-              first: 1000,
-              after: cursor || undefined,
-              mediaType: MediaLibrary.MediaType.photo,
-            };
-            if (screenshotAlbum) opts.album = screenshotAlbum;
-            const r = await MediaLibrary.getAssetsAsync(opts);
-            if (!cursor) {
-              if (filter === 'all') libraryTotal += r.totalCount;
-              knownTotal += r.totalCount;
+        // Use native module for fast parallel loading when available
+        if (fileSizeModuleAvailable && filter !== 'screenshots') {
+          // Use cached assets if available, otherwise fetch once
+          if (!allAssetsCache.current) {
+            const nativeAssets = await getAllAssetsNative([1, 2]); // fetch ALL photos + videos once
+            allAssetsCache.current = nativeAssets.map((a) => ({
+              ...a,
+              mediaType: a.mediaType === 'photo' ? 'photo' : 'video',
+            }));
+          }
+          // Filter by media type for this filter
+          if (loadPhotos && loadVideos) {
+            allAssets = allAssetsCache.current;
+          } else if (loadPhotos) {
+            allAssets = allAssetsCache.current.filter((a) => a.mediaType === 'photo');
+          } else if (loadVideos) {
+            allAssets = allAssetsCache.current.filter((a) => a.mediaType === 'video');
+          }
+          setLoadProgress({ loaded: allAssets.length, total: allAssets.length });
+          if (filter === 'all' || filter === 'oldest') {
+            libraryTotal = allAssetsCache.current.length;
+          }
+        } else {
+          // JS fallback — sequential page-by-page loading
+          let cursor = undefined;
+          let hasNext = true;
+          let knownTotal = 0;
+
+          if (loadPhotos) {
+            cursor = undefined; hasNext = true;
+            while (hasNext) {
+              if (myLoadId !== loadIdRef.current) return;
+              const opts = {
+                first: 1000,
+                after: cursor || undefined,
+                mediaType: MediaLibrary.MediaType.photo,
+              };
+              if (screenshotAlbum) opts.album = screenshotAlbum;
+              const r = await MediaLibrary.getAssetsAsync(opts);
+              if (!cursor) {
+                if (filter === 'all') libraryTotal += r.totalCount;
+                knownTotal += r.totalCount;
+              }
+              allAssets.push(...r.assets);
+              setLoadProgress({ loaded: allAssets.length, total: knownTotal });
+              hasNext = r.hasNextPage;
+              if (r.assets.length > 0) cursor = r.assets[r.assets.length - 1].id;
+              else break;
             }
-            allAssets.push(...r.assets);
-            setLoadProgress({ loaded: allAssets.length, total: knownTotal });
-            hasNext = r.hasNextPage;
-            if (r.assets.length > 0) cursor = r.assets[r.assets.length - 1].id;
-            else break;
+          }
+
+          if (loadVideos) {
+            cursor = undefined; hasNext = true;
+            while (hasNext) {
+              if (myLoadId !== loadIdRef.current) return;
+              const r = await MediaLibrary.getAssetsAsync({
+                first: 1000,
+                after: cursor || undefined,
+                mediaType: MediaLibrary.MediaType.video,
+              });
+              if (!cursor) {
+                if (filter === 'all') libraryTotal += r.totalCount;
+                knownTotal += r.totalCount;
+              }
+              allAssets.push(...r.assets);
+              setLoadProgress({ loaded: allAssets.length, total: knownTotal });
+              hasNext = r.hasNextPage;
+              if (r.assets.length > 0) cursor = r.assets[r.assets.length - 1].id;
+              else break;
+            }
           }
         }
 
-        if (loadVideos) {
-          cursor = undefined; hasNext = true;
-          while (hasNext) {
-            if (myLoadId !== loadIdRef.current) return;
-            const r = await MediaLibrary.getAssetsAsync({
-              first: 1000,
-              after: cursor || undefined,
-              mediaType: MediaLibrary.MediaType.video,
-            });
-            if (!cursor) {
-              if (filter === 'all') libraryTotal += r.totalCount;
-              knownTotal += r.totalCount;
-            }
-            allAssets.push(...r.assets);
-            setLoadProgress({ loaded: allAssets.length, total: knownTotal });
-            hasNext = r.hasNextPage;
-            if (r.assets.length > 0) cursor = r.assets[r.assets.length - 1].id;
-            else break;
-          }
-        }
-
-        // Store total library size for Stats screen (use MediaLibrary's totalCount for accuracy)
-        if (filter === 'all') {
-          dispatch({ type: 'SET_LIBRARY_SIZE', payload: libraryTotal });
+        // Store total library size for Stats screen
+        if (filter === 'all' || filter === 'oldest') {
+          dispatch({ type: 'SET_LIBRARY_SIZE', payload: libraryTotal || allAssets.length });
           // Save all asset IDs for background file size preloading
           allAssetIdsRef.current = allAssets.map((a) => a.id);
         }
@@ -325,6 +352,67 @@ export default function SwipeScreen() {
   }, []);
 
   useEffect(() => { if (persistLoaded) loadAssets(activeFilter); }, [persistLoaded]);
+
+  // Prefetch first 25 of each filter in the background after initial load
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (loading || !allAssetsCache.current || prefetchedRef.current) return;
+    prefetchedRef.current = true;
+
+    const prefetch = async () => {
+      const idsToSkip = new Set(seenIdsRef.current);
+      for (const a of assetsRef.current || []) idsToSkip.add(a.id);
+      const cached = allAssetsCache.current;
+      const PREFETCH_SIZE = 25;
+
+      const filters = ['oldest', 'newest', 'all', 'largest', 'photos', 'videos'];
+      for (const f of filters) {
+        if (f === activeFilter) continue; // already loaded
+        if (filterCacheRef.current[f]) continue; // already cached
+
+        let batch = [];
+        if (f === 'oldest') {
+          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
+          batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
+        } else if (f === 'newest') {
+          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
+          batch = unseen.sort((a, b) => b.creationTime - a.creationTime).slice(0, PREFETCH_SIZE);
+        } else if (f === 'all') {
+          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
+          // Shuffle
+          const arr = [...unseen];
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          batch = arr.slice(0, PREFETCH_SIZE);
+        } else if (f === 'largest') {
+          if (fileSizeModuleAvailable) {
+            try {
+              const seenArray = [...idsToSkip];
+              const sorted = await getLargestUnseen(seenArray, [1, 2], PREFETCH_SIZE);
+              const unseenMap = {};
+              for (const a of cached) unseenMap[a.id] = a;
+              batch = sorted.filter((item) => unseenMap[item.id]).map((item) => ({ ...unseenMap[item.id], fileSize: item.fileSize }));
+            } catch {}
+          }
+        } else if (f === 'photos') {
+          const unseen = cached.filter((a) => a.mediaType === 'photo' && !idsToSkip.has(a.id));
+          batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
+        } else if (f === 'videos') {
+          const unseen = cached.filter((a) => a.mediaType === 'video' && !idsToSkip.has(a.id));
+          batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
+        }
+
+        if (batch.length > 0) {
+          filterCacheRef.current[f] = { assets: batch, currentIndex: 0 };
+        }
+      }
+    };
+
+    // Delay prefetch to not compete with the active filter
+    setTimeout(prefetch, 1000);
+  }, [loading]);
 
   // Daily limit reset removed — was temporary for testing
 
