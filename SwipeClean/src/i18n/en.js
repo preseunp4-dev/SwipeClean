@@ -15,13 +15,13 @@ export default {
     page1Title: 'Swipe to Clean',
     page1Subtitle: 'Swipe right to keep a photo.\nSwipe left to trash it.\nIt\'s that simple.',
     page2Title: 'Find Duplicates',
-    page2Subtitle: 'We group similar and duplicate photos.\nSelect which ones to keep or trash.\nKeep your best shot, remove the rest.',
-    page3Title: 'Review & Delete',
-    page3Subtitle: 'Trashed photos go to your Trash Pile.\nReview them before deleting permanently.\nNothing is removed until you confirm.',
+    page2Subtitle: 'We group similar and duplicate photos.\nChoose which ones to keep or trash.\nKeep your best shot, ditch the rest.',
+    page3Title: 'Review Before You Delete',
+    page3Subtitle: 'Trashed photos land in your Trash Pile.\nReview them before permanently deleting.\nNothing gets removed until you say so.',
     page4Title: 'Track Your Progress',
-    page4Subtitle: 'See how many photos you\'ve reviewed.\nTrack storage saved and your keep vs trash ratio.\nWatch your library get cleaner.',
+    page4Subtitle: 'See how many photos you\'ve gone through.\nTrack space saved and your keep vs trash ratio.\nWatch your library get cleaner over time.',
     page5Title: 'Made for Everyone',
-    page5Subtitle: 'Switch between dark and light mode.\nColorblind-friendly colors included.\nCustomize the app to suit you.',
+    page5Subtitle: 'Switch between dark and light mode.\nColorblind-friendly colors built in.\nMake the app your own.',
   },
 
   // SwipeScreen
