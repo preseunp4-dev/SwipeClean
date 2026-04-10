@@ -186,11 +186,11 @@ public class FileSizeModule: Module {
           let avg = grays.reduce(0, +) / Double(grays.count)
 
           // Build hash: each bit = 1 if pixel > average
-          var h: UInt64 = 0
+          var hashVal: UInt64 = 0
           for j in 0..<64 {
-            if grays[j] > avg { h |= (1 << j) }
+            if grays[j] > avg { hashVal |= (1 << j) }
           }
-          hash = h
+          hash = hashVal
         }
         sem.wait()
 
