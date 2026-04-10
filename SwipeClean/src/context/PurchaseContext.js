@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import * as InAppPurchases from 'expo-in-app-purchases';
+let InAppPurchases = null;
+try { InAppPurchases = require('expo-in-app-purchases'); } catch {}
 
 const PurchaseContext = createContext();
 
@@ -34,6 +35,9 @@ export function PurchaseProvider({ children }) {
         // Check persisted pro status first
         const saved = await SecureStore.getItemAsync(PRO_KEY);
         if (saved === 'true' && mounted) setIsProState(true);
+
+        // Skip StoreKit if module not available (Expo Go)
+        if (!InAppPurchases) { if (mounted) setLoading(false); return; }
 
         // Connect to the store
         await InAppPurchases.connectAsync();

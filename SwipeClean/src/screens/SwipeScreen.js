@@ -23,6 +23,7 @@ const FILTERS = [
   { key: 'newest', label: 'swipe.filterNewest' },
   { key: 'all', label: 'swipe.filterRandom' },
   { key: 'largest', label: 'swipe.filterLargest' },
+  { key: 'photos', label: 'swipe.filterPhotos' },
   { key: 'videos', label: 'swipe.filterVideos' },
   { key: 'screenshots', label: 'swipe.filterScreenshots' },
 ];
@@ -125,7 +126,7 @@ export default function SwipeScreen() {
         let cursor = undefined;
         let hasNext = true;
         const loadPhotos = filter !== 'videos';
-        const loadVideos = filter !== 'screenshots';
+        const loadVideos = filter !== 'screenshots' && filter !== 'photos';
         let libraryTotal = 0;
         setLoadProgress({ loaded: 0, total: 0 });
         progressAnim.setValue(0);
@@ -503,26 +504,45 @@ export default function SwipeScreen() {
   const handleToggleMute = useCallback(() => setMuted((m) => !m), []);
   const handleEnterComplete = useCallback(() => setEnterFrom(null), []);
 
+  const swipesLeft = Math.max(0, DAILY_FREE_LIMIT - dailySwipes);
+
   const filterBar = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.filterBar}
-      style={{ flexGrow: 0, zIndex: 1 }}
-    >
-      {FILTERS.map((f) => (
-        <TouchableOpacity
-          key={f.key}
-          style={[styles.filterChip, { backgroundColor: theme.card, borderColor: theme.border }, activeFilter === f.key && styles.filterChipActive]}
-          onPress={() => handleFilterChange(f.key)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.filterText, { color: theme.textSecondary }, activeFilter === f.key && styles.filterTextActive]}>
-            {t(f.label)}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+    <View style={styles.filterRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterBar}
+        style={{ flexGrow: 0, marginRight: 80 }}
+      >
+        {FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.filterChip, { backgroundColor: theme.card, borderColor: theme.border }, activeFilter === f.key && styles.filterChipActive]}
+            onPress={() => handleFilterChange(f.key)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.filterText, { color: theme.textSecondary }, activeFilter === f.key && styles.filterTextActive]}>
+              {t(f.label)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      {isPro ? (
+        <View style={styles.proTagAbsolute}>
+          <View style={[styles.proTagA, { backgroundColor: theme.isDark ? '#2a2548' : '#e8e5f5' }]}>
+            <Ionicons name="bag-check-outline" size={13} color="#5856D6" />
+            <Text style={styles.proTextA}>Pro</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.proTagAbsolute}>
+          <TouchableOpacity onPress={() => navigation.navigate('Stats', { scrollToUpgrade: true })} activeOpacity={0.7} style={[styles.proTagA, { backgroundColor: theme.isDark ? '#2a2548' : '#e8e5f5' }]}>
+            <Ionicons name="bag-outline" size={13} color="#5856D6" />
+            <Text style={styles.proTextA}>{swipesLeft}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 
   if (permStatus === 'denied') {
@@ -655,8 +675,6 @@ export default function SwipeScreen() {
     );
   }
 
-  const swipesLeft = Math.max(0, DAILY_FREE_LIMIT - dailySwipes);
-
   const cardStack = (
     <View style={styles.cardContainer}>
       <View style={styles.cardWrapper}>
@@ -667,6 +685,7 @@ export default function SwipeScreen() {
             asset={nextAsset}
             isPreview
             onFileSizeLoaded={handleFileSizeLoaded}
+            onShare={handleShare}
           />
         )}
         <SwipeCard
@@ -683,33 +702,12 @@ export default function SwipeScreen() {
           onFileSizeLoaded={handleFileSizeLoaded}
           totalKept={totalKept}
           totalTrashed={totalTrashed}
+          onShare={handleShare}
         />
       </View>
     </View>
   );
 
-  const middleRow = (
-    <View style={styles.middleRow}>
-      {isPro ? (
-        <View style={[styles.proTagA, { backgroundColor: '#FFD60A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }]}>
-          <Ionicons name="star" size={11} color="#000" />
-          <Text style={[styles.proTextA, { color: '#000' }]}>Pro</Text>
-        </View>
-      ) : (
-        <TouchableOpacity onPress={() => navigation.navigate('Stats', { scrollToUpgrade: true })} activeOpacity={0.7} style={styles.proTagA}>
-          <Ionicons name="star" size={11} color="#5856D6" />
-          <Text style={styles.proTextA}>{t('swipe.leftUpgrade', { count: swipesLeft })}</Text>
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity
-        style={[styles.shareBtn, { borderColor: theme.textQuaternary, backgroundColor: theme.shareBtn }]}
-        onPress={handleShare}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="share-outline" size={18} color={theme.text} />
-      </TouchableOpacity>
-    </View>
-  );
 
   const actionButtons = (
     <View style={styles.buttonRowOuter}>
@@ -762,7 +760,6 @@ export default function SwipeScreen() {
       {filterBar}
       {cardStack}
       <MilestoneOverlay totalReviewed={totalKept + totalTrashed} />
-      {middleRow}
       {actionButtons}
     </View>
   );
@@ -875,12 +872,12 @@ const styles = StyleSheet.create({
   cardContainer: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: Math.round(SCREEN_HEIGHT * 0.007),
+    paddingTop: 8,
   },
   cardWrapper: {
     width: CARD_WIDTH,
     flex: 1,
-    maxHeight: CARD_HEIGHT,
+    marginBottom: 10,
   },
   cardShadow: {
     ...StyleSheet.absoluteFillObject,
@@ -891,17 +888,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 8,
   },
-  middleRow: {
+  cardShareBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    zIndex: 10,
+  },
+  filterRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 6,
-    width: '100%',
+    zIndex: 1,
+    overflow: 'visible',
   },
   buttonRowOuter: {
     alignItems: 'center',
-    paddingBottom: Math.max(Math.round(SCREEN_HEIGHT * 0.012), 4),
+    paddingBottom: Math.round(SCREEN_HEIGHT * 0.012),
     paddingTop: 4,
     width: '100%',
   },
@@ -977,7 +982,8 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingLeft: sw(20),
+    paddingRight: 8,
     paddingVertical: Math.round(SCREEN_HEIGHT * 0.009),
     gap: 10,
   },
@@ -1023,6 +1029,15 @@ const styles = StyleSheet.create({
   statA: {
     fontSize: Math.max(11, Math.round(SCALE_WIDTH * 0.033)),
     fontWeight: '600',
+  },
+  proTagAbsolute: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    paddingRight: sw(20),
+    zIndex: 5,
   },
   proTagA: {
     flexDirection: 'row',

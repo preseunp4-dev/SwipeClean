@@ -366,63 +366,51 @@ export default function DuplicatesScreen() {
       setDismissedKeys(currentDismissed);
       const visibleGroups = foundGroups.filter((g) => !currentDismissed.has(groupKey(g.assets)));
 
-      // Analyze photo quality in progressive batches
-      // First 25, then batches of 50
+      // Analyze photo quality and auto-suggest best photo per group
       if (photoQualityAvailable && visibleGroups.length > 0) {
-        const FIRST_BATCH = 25;
-        const NEXT_BATCH = 50;
-        let processed = 0;
-
-        const analyzeGroup = async (group) => {
+        setProgress({ loaded: 0, total: visibleGroups.length });
+        for (let gi = 0; gi < visibleGroups.length; gi++) {
+          const group = visibleGroups[gi];
           try {
             const ids = group.assets.map((a) => a.id);
             const scores = await analyzePhotos(ids);
             const scoreMap = {};
             for (const s of scores) scoreMap[s.id] = s.compositeScore;
+
+            // Find best photo (highest composite score)
             let bestId = group.assets[0].id;
             let bestScore = -1;
             for (const asset of group.assets) {
               const score = scoreMap[asset.id] || 0;
-              if (score > bestScore) { bestScore = score; bestId = asset.id; }
+              if (score > bestScore) {
+                bestScore = score;
+                bestId = asset.id;
+              }
             }
-            group.assets = [
+
+            // Move best photo to first position
+            const sorted = [
               ...group.assets.filter((a) => a.id === bestId),
               ...group.assets.filter((a) => a.id !== bestId),
             ];
+            group.assets = sorted;
             group.bestId = bestId;
-            group.trashIds = new Set(group.assets.filter((a) => a.id !== bestId).map((a) => a.id));
-          } catch (e) { /* skip */ }
-        };
 
-        // First batch: analyze 25 groups, then show them
-        const firstEnd = Math.min(FIRST_BATCH, visibleGroups.length);
-        setProgress({ loaded: 0, total: visibleGroups.length });
-        for (let i = 0; i < firstEnd; i++) {
-          await analyzeGroup(visibleGroups[i]);
-          processed++;
-          setProgress({ loaded: processed, total: visibleGroups.length });
-        }
-        setGroups(visibleGroups.slice(0, firstEnd));
-        setPhase('done');
-
-        // Remaining batches: analyze 50 at a time, append when done
-        let batchStart = firstEnd;
-        while (batchStart < visibleGroups.length) {
-          const batchEnd = Math.min(batchStart + NEXT_BATCH, visibleGroups.length);
-          for (let i = batchStart; i < batchEnd; i++) {
-            await analyzeGroup(visibleGroups[i]);
-            processed++;
-            setProgress({ loaded: processed, total: visibleGroups.length });
+            // Pre-select all others as trash
+            const trashIds = new Set();
+            for (const asset of group.assets) {
+              if (asset.id !== bestId) trashIds.add(asset.id);
+            }
+            group.trashIds = trashIds;
+          } catch (e) {
+            // Quality analysis failed for this group — skip
           }
-          setGroups((prev) => [...prev, ...visibleGroups.slice(batchStart, batchEnd)]);
-          batchStart = batchEnd;
+          setProgress({ loaded: gi + 1, total: visibleGroups.length });
         }
-        setProgress({ loaded: visibleGroups.length, total: visibleGroups.length });
-      } else {
-        // No AI — show all groups immediately
-        setGroups(visibleGroups);
-        setPhase('done');
       }
+
+      setGroups(visibleGroups);
+      setPhase('done');
     } catch (err) {
       console.warn('Scan error:', err);
       Alert.alert(t('common.error'), t('duplicates.errorMessage'));
@@ -556,14 +544,6 @@ export default function DuplicatesScreen() {
         keyExtractor={(g) => g.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={<View style={{ height: insets.top + 83 }} />}
-        ListFooterComponent={progress.loaded < progress.total && progress.total > 0 ? (
-          <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-            <ActivityIndicator size="small" color="#5856D6" />
-            <Text style={{ color: theme.textSecondary, fontSize: sw(13), marginTop: 8 }}>
-              {t('duplicates.analyzing')} {progress.loaded}/{progress.total}
-            </Text>
-          </View>
-        ) : null}
         renderItem={({ item: group }) => {
           const trashIds = group.trashIds || new Set();
           const trashCount = trashIds.size;
@@ -599,6 +579,7 @@ export default function DuplicatesScreen() {
                       />
                       {isBest && (
                         <View style={styles.bestBadge}>
+                          <Ionicons name="star" size={10} color="#000" />
                           <Text style={styles.bestBadgeText}>BEST</Text>
                         </View>
                       )}

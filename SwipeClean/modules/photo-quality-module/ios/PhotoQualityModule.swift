@@ -9,88 +9,77 @@ public class PhotoQualityModule: Module {
 
     AsyncFunction("analyzePhotos") { (localIdentifiers: [String]) -> [[String: Any]] in
       let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: localIdentifiers, options: nil)
-      var results: [[String: Any]] = []
-      let imageManager = PHImageManager.default()
-      let requestOptions = PHImageRequestOptions()
-      requestOptions.isSynchronous = true
-      requestOptions.deliveryMode = .highQualityFormat
-      requestOptions.isNetworkAccessAllowed = false // Don't download from iCloud
-      // Use a smaller target size for faster analysis
-      let targetSize = CGSize(width: 800, height: 800)
+      let count = fetchResult.count
+      if count == 0 { return [] }
 
-      for i in 0..<fetchResult.count {
-        let asset = fetchResult.object(at: i)
+      // Pre-fetch all assets into array for concurrent access
+      var assets: [PHAsset] = []
+      for i in 0..<count { assets.append(fetchResult.object(at: i)) }
+
+      // Thread-safe results array
+      var results = Array<[String: Any]>(repeating: [:], count: count)
+      let lock = NSLock()
+      let imageManager = PHImageManager.default()
+      let targetSize = CGSize(width: 600, height: 600) // Smaller = faster
+
+      // Process all photos concurrently across CPU cores
+      DispatchQueue.concurrentPerform(iterations: count) { i in
+        let asset = assets[i]
         var result: [String: Any] = [
           "id": asset.localIdentifier,
-          "sharpness": 0.5,
-          "exposure": 0.5,
-          "facesDetected": 0,
-          "eyesOpen": false,
-          "smiling": false,
-          "faceQuality": 0.0,
-          "compositeScore": 50.0
+          "sharpness": 0.5, "exposure": 0.5,
+          "facesDetected": 0, "eyesOpen": false, "smiling": false,
+          "faceQuality": 0.0, "compositeScore": 50.0
         ]
 
-        // Request image for analysis
+        let options = PHImageRequestOptions()
+        options.isSynchronous = true
+        options.deliveryMode = .fastFormat
+        options.isNetworkAccessAllowed = false
+        options.resizeMode = .fast
+
         let semaphore = DispatchSemaphore(value: 0)
-        imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFit, options: requestOptions) { image, info in
+        imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFit, options: options) { image, _ in
           defer { semaphore.signal() }
           guard let cgImage = image?.cgImage else { return }
 
-          // 1. Sharpness (Laplacian variance)
           let sharpness = self.calculateSharpness(cgImage)
-          result["sharpness"] = sharpness
-
-          // 2. Exposure (brightness histogram)
           let exposure = self.calculateExposure(cgImage)
-          result["exposure"] = exposure
-
-          // 3. Face detection with landmarks
           let faceResults = self.analyzeFaces(cgImage)
+
+          result["sharpness"] = sharpness
+          result["exposure"] = exposure
           result["facesDetected"] = faceResults.faceCount
           result["eyesOpen"] = faceResults.eyesOpen
           result["smiling"] = faceResults.smiling
           result["faceQuality"] = faceResults.quality
 
-          // 4. Composite score
           let resolution = Double(asset.pixelWidth * asset.pixelHeight)
-          let resolutionScore = min(resolution / 12_000_000.0, 1.0) // Normalize to 12MP
+          let resolutionScore = min(resolution / 12_000_000.0, 1.0)
 
-          // Get file size
           let resources = PHAssetResource.assetResources(for: asset)
           var fileSize: Int64 = 0
           for resource in resources {
-            if let size = resource.value(forKey: "fileSize") as? Int64 {
-              fileSize += size
-            }
+            if let size = resource.value(forKey: "fileSize") as? Int64 { fileSize += size }
           }
-          let fileSizeScore = min(Double(fileSize) / 10_000_000.0, 1.0) // Normalize to 10MB
-
-          // Exposure score: distance from ideal (0.5)
+          let fileSizeScore = min(Double(fileSize) / 10_000_000.0, 1.0)
           let exposureScore = 1.0 - abs(exposure - 0.5) * 2.0
 
-          // Composite: weighted average
-          var composite = 0.0
-          composite += sharpness * 30        // Sharpness is most important
-          composite += exposureScore * 15    // Good exposure matters
-          composite += resolutionScore * 10  // Higher res is better
-          composite += fileSizeScore * 10    // Larger file = more detail
-
-          // Face bonus
+          var composite = sharpness * 30 + exposureScore * 15 + resolutionScore * 10 + fileSizeScore * 10
           if faceResults.faceCount > 0 {
-            composite += faceResults.quality * 10  // Face quality (size/clarity)
-            if faceResults.eyesOpen { composite += 12 } else { composite -= 5 } // Eyes open/closed
-            if faceResults.smiling { composite += 13 } else { composite -= 3 }  // Smiling/not
+            composite += faceResults.quality * 10
+            composite += faceResults.eyesOpen ? 12 : -5
+            composite += faceResults.smiling ? 13 : -3
           } else {
-            // No faces — redistribute face points to sharpness/exposure
-            composite += sharpness * 20
-            composite += exposureScore * 15
+            composite += sharpness * 20 + exposureScore * 15
           }
-
           result["compositeScore"] = min(composite, 100.0)
         }
         semaphore.wait()
-        results.append(result)
+
+        lock.lock()
+        results[i] = result
+        lock.unlock()
       }
 
       return results

@@ -56,6 +56,7 @@ export default {
     sound: 'Sound',
     filterAll: 'All',
     filterRandom: 'Random',
+    filterPhotos: 'Photos',
     filterScreenshots: 'Screenshots',
     filterVideos: 'Videos',
     filterOldest: 'Oldest',

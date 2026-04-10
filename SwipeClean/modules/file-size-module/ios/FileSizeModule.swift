@@ -116,35 +116,52 @@ public class FileSizeModule: Module {
     // --- NEW #3: Find duplicate groups natively ---
     AsyncFunction("findDuplicateGroups") { (mediaTypes: [Int], timeWindowMs: Int, minSizeRatio: Double) -> [[String: Any]] in
       // Fetch all assets sorted by creation time
-      var allAssets: [(id: String, time: Double, width: Int, height: Int, size: Int64, mediaType: String, duration: Double, uri: String)] = []
+      struct AssetData {
+        let id: String; let time: Double; let width: Int; let height: Int
+        var size: Int64; let mediaType: String; let duration: Double; let uri: String
+      }
 
+      // First pass: collect all assets (fast — no file size yet)
+      var rawAssets: [(asset: PHAsset, mediaType: String)] = []
       for mediaType in mediaTypes {
         let type: PHAssetMediaType = mediaType == 1 ? .image : .video
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
         let fetchResult = PHAsset.fetchAssets(with: type, options: options)
-
+        let typeStr = mediaType == 1 ? "photo" : "video"
         for i in 0..<fetchResult.count {
-          let asset = fetchResult.object(at: i)
-          let resources = PHAssetResource.assetResources(for: asset)
-          var totalSize: Int64 = 0
-          for resource in resources {
-            if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
-          }
-          allAssets.append((
-            id: asset.localIdentifier,
-            time: (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000, // ms
-            width: asset.pixelWidth,
-            height: asset.pixelHeight,
-            size: totalSize,
-            mediaType: asset.mediaType == .image ? "photo" : "video",
-            duration: asset.duration,
-            uri: "ph://\(asset.localIdentifier)"
-          ))
+          rawAssets.append((asset: fetchResult.object(at: i), mediaType: typeStr))
         }
       }
 
-      // Sort by creation time
+      // Second pass: get file sizes concurrently
+      var allAssets = Array<AssetData>(repeating: AssetData(id: "", time: 0, width: 0, height: 0, size: 0, mediaType: "", duration: 0, uri: ""), count: rawAssets.count)
+      let lock = NSLock()
+
+      DispatchQueue.concurrentPerform(iterations: rawAssets.count) { i in
+        let (asset, typeStr) = rawAssets[i]
+        let resources = PHAssetResource.assetResources(for: asset)
+        var totalSize: Int64 = 0
+        for resource in resources {
+          if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
+        }
+        let data = AssetData(
+          id: asset.localIdentifier,
+          time: (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000,
+          width: asset.pixelWidth,
+          height: asset.pixelHeight,
+          size: totalSize,
+          mediaType: typeStr,
+          duration: asset.duration,
+          uri: "ph://\(asset.localIdentifier)"
+        )
+        lock.lock()
+        allAssets[i] = data
+        lock.unlock()
+      }
+
+      // Filter out empty entries and sort by creation time
+      allAssets = allAssets.filter { !$0.id.isEmpty }
       allAssets.sort { $0.time < $1.time }
 
       let timeWindow = Double(timeWindowMs)

@@ -17,10 +17,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCALE_WIDTH = Math.min(SCREEN_WIDTH, 430);
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
 export const CARD_WIDTH = Math.min(SCREEN_WIDTH - sw(40), 500);
-// Cap card height so there's always ≥160pt left for filter bar, buttons, tab bar & safe areas.
-// On iPhone 13 (844pt): min(507, 664) = 507 — unchanged.
-// On smaller screens the card shrinks to guarantee button space.
-export const CARD_HEIGHT = Math.min(SCALE_WIDTH * 1.3, SCREEN_HEIGHT - 180);
+// Cap card height so there's always room for filter bar, buttons, tab bar & safe areas.
+// Middle row removed — card can be taller now.
+export const CARD_HEIGHT = Math.min(SCALE_WIDTH * 1.3, SCREEN_HEIGHT - 140);
 // Minimum gap between card bottom and button row
 export const MIN_CARD_BUTTON_GAP = 16;
 const EXIT_DURATION = 200;
@@ -74,7 +73,7 @@ function VideoCardContent({ uri, muted, paused, onPlayerReady }) {
   );
 }
 
-const SwipeCard = React.memo(forwardRef(({ asset, onSwipeLeft, onSwipeRight, isPreview, muted, onToggleMute, screenFocused = true, onFileSizeLoaded, enterFrom, onEnterComplete, totalKept, totalTrashed }, ref) => {
+const SwipeCard = React.memo(forwardRef(({ asset, onSwipeLeft, onSwipeRight, isPreview, muted, onToggleMute, screenFocused = true, onFileSizeLoaded, enterFrom, onEnterComplete, totalKept, totalTrashed, onShare }, ref) => {
   const { colors, theme } = useColors();
   const pan = useRef(new Animated.ValueXY(
     enterFrom ? { x: (enterFrom === 'left' ? -1 : 1) * SCREEN_WIDTH * 1.5, y: 0 } : { x: 0, y: 0 }
@@ -108,13 +107,11 @@ const SwipeCard = React.memo(forwardRef(({ asset, onSwipeLeft, onSwipeRight, isP
   const fallbackAttempted = useRef(false);
 
   // Fetch file size — try asset info, then new File class
-  // Skip for preview cards — will fetch when promoted to active
   useEffect(() => {
     if (asset.fileSize) {
       setFileSize(asset.fileSize);
       return;
     }
-    if (isPreview) return;
     let cancelled = false;
     (async () => {
       try {
@@ -457,12 +454,19 @@ const SwipeCard = React.memo(forwardRef(({ asset, onSwipeLeft, onSwipeRight, isP
         </TouchableOpacity>
       )}
 
-      {/* Info text */}
-      <View style={styles.infoPill}>
-        <Text style={styles.infoText} numberOfLines={1}>
-          {formatBytes(fileSize)}  ·  {formatDate(asset.creationTime)}
-          {asset.duration ? `  ·  ${formatDuration(asset.duration)}` : ''}
-        </Text>
+      {/* Info text + share */}
+      <View style={styles.infoRow}>
+        <View style={styles.infoPill}>
+          <Text style={styles.infoText} numberOfLines={1}>
+            {formatBytes(fileSize)}  ·  {formatDate(asset.creationTime)}
+            {asset.duration ? `  ·  ${formatDuration(asset.duration)}` : ''}
+          </Text>
+        </View>
+        {onShare && (
+          <TouchableOpacity onPress={isPreview ? undefined : onShare} activeOpacity={0.6} style={styles.shareBtn}>
+            <Ionicons name="share-outline" size={14} color="rgba(255,255,255,0.85)" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Video progress bar — scrubbable */}
@@ -596,12 +600,25 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  infoPill: {
+  infoRow: {
     position: 'absolute',
     bottom: 12,
-    alignSelf: 'center',
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  infoPill: {
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  shareBtn: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
   },
