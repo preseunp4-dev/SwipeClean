@@ -100,15 +100,20 @@ export function PurchaseProvider({ children }) {
 
   const restorePurchases = useCallback(async () => {
     try {
+      if (!InAppPurchases) return false;
       const { responseCode, results } = await InAppPurchases.getPurchaseHistoryAsync();
       if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
         for (const purchase of results) {
           if (PRODUCT_IDS.includes(purchase.productId)) {
             setIsPro(true);
+            const { Alert } = require('react-native');
+            Alert.alert('Restored', 'Your purchase has been restored.');
             return true;
           }
         }
       }
+      const { Alert } = require('react-native');
+      Alert.alert('No purchases found', 'No previous purchases were found for this account.');
       return false;
     } catch (err) {
       console.warn('Restore error:', err.message);
