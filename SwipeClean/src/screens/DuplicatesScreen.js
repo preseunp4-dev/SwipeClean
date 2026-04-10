@@ -440,11 +440,12 @@ export default function DuplicatesScreen() {
     }
   }, []);
 
-  // Auto-scan on mount
+  // Auto-scan — delayed to let swipe screen load first (Phase 1 + prefetch)
   useEffect(() => {
     if (!hasScannedRef.current) {
       hasScannedRef.current = true;
-      scan();
+      const timer = setTimeout(() => scan(), 4000); // Wait 4s for swipe screen to finish
+      return () => clearTimeout(timer);
     }
   }, []);
 

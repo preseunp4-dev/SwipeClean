@@ -411,7 +411,8 @@ export default function SwipeScreen() {
     };
 
     // Delay prefetch to not compete with the active filter
-    setTimeout(prefetch, 1000);
+    // Phase 1 done → prefetch after 2s so UI is settled
+    setTimeout(prefetch, 2000);
   }, [loading]);
 
   // Daily limit reset removed — was temporary for testing
