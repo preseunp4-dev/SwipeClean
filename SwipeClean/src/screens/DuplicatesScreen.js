@@ -440,11 +440,11 @@ export default function DuplicatesScreen() {
     }
   }, []);
 
-  // Auto-scan — delayed to let swipe screen load first (Phase 1 + prefetch)
+  // Auto-scan — small delay to let swipe screen show first photo
   useEffect(() => {
     if (!hasScannedRef.current) {
       hasScannedRef.current = true;
-      const timer = setTimeout(() => scan(), 4000); // Wait 4s for swipe screen to finish
+      const timer = setTimeout(() => scan(), 2000);
       return () => clearTimeout(timer);
     }
   }, []);

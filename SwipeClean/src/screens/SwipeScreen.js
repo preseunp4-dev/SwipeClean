@@ -130,17 +130,9 @@ export default function SwipeScreen() {
         setLoadProgress({ loaded: 0, total: 0 });
         progressAnim.setValue(0);
 
-        // Use native module for fast parallel loading when available
-        if (fileSizeModuleAvailable && filter !== 'screenshots') {
-          // Use cached assets if available, otherwise fetch once
-          if (!allAssetsCache.current) {
-            const nativeAssets = await getAllAssetsNative([1, 2]); // fetch ALL photos + videos once
-            allAssetsCache.current = nativeAssets.map((a) => ({
-              ...a,
-              mediaType: a.mediaType === 'photo' ? 'photo' : 'video',
-            }));
-          }
-          // Filter by media type for this filter
+        // If cache is ready, use it instantly. Otherwise use fast MediaLibrary for first load.
+        if (allAssetsCache.current) {
+          // Cache available — instant filter from memory
           if (loadPhotos && loadVideos) {
             allAssets = allAssetsCache.current;
           } else if (loadPhotos) {
@@ -151,6 +143,68 @@ export default function SwipeScreen() {
           setLoadProgress({ loaded: allAssets.length, total: allAssets.length });
           if (filter === 'all' || filter === 'oldest') {
             libraryTotal = allAssetsCache.current.length;
+          }
+        } else if (filter !== 'screenshots') {
+          // First load — use fast MediaLibrary to show photos immediately
+          // Native cache will be built in background after this
+          let cursor = undefined;
+          let hasNext = true;
+          let knownTotal = 0;
+          // Load first batch quickly
+          while (hasNext && allAssets.length < PAGE_SIZE * 2) {
+            if (myLoadId !== loadIdRef.current) return;
+            const r = await MediaLibrary.getAssetsAsync({
+              first: 500,
+              after: cursor || undefined,
+              mediaType: loadVideos && !loadPhotos ? MediaLibrary.MediaType.video : MediaLibrary.MediaType.photo,
+              sortBy: [MediaLibrary.SortBy.creationTime],
+            });
+            if (!cursor) {
+              libraryTotal += r.totalCount;
+              knownTotal += r.totalCount;
+            }
+            allAssets.push(...r.assets);
+            setLoadProgress({ loaded: allAssets.length, total: knownTotal });
+            hasNext = r.hasNextPage;
+            if (r.assets.length > 0) cursor = r.assets[r.assets.length - 1].id;
+            else break;
+          }
+
+          // Start building native cache in background (don't await)
+          if (fileSizeModuleAvailable && !allAssetsCache.current) {
+            getAllAssetsNative([1, 2]).then((nativeAssets) => {
+              allAssetsCache.current = nativeAssets.map((a) => ({
+                ...a,
+                mediaType: a.mediaType === 'photo' ? 'photo' : 'video',
+              }));
+              allAssetIdsRef.current = allAssetsCache.current.map((a) => a.id);
+              // Prefetch all filters now that cache is ready
+              if (prefetchedRef.current === false) {
+                prefetchedRef.current = true;
+                // Trigger prefetch via a small delay
+                setTimeout(() => {
+                  const idsToSkipNow = new Set(seenIdsRef.current);
+                  for (const a of assetsRef.current || []) idsToSkipNow.add(a.id);
+                  const cached = allAssetsCache.current;
+                  const filters = ['oldest', 'newest', 'all', 'largest', 'photos', 'videos'];
+                  for (const f of filters) {
+                    if (f === activeFilter || filterCacheRef.current[f]) continue;
+                    let batch = [];
+                    const unseen = f === 'photos' ? cached.filter((a) => a.mediaType === 'photo' && !idsToSkipNow.has(a.id))
+                      : f === 'videos' ? cached.filter((a) => a.mediaType === 'video' && !idsToSkipNow.has(a.id))
+                      : cached.filter((a) => !idsToSkipNow.has(a.id));
+                    if (f === 'oldest') batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PAGE_SIZE);
+                    else if (f === 'newest') batch = unseen.sort((a, b) => b.creationTime - a.creationTime).slice(0, PAGE_SIZE);
+                    else if (f === 'largest') batch = unseen.sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0)).slice(0, PAGE_SIZE);
+                    else if (f === 'all') {
+                      const arr = [...unseen]; for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+                      batch = arr.slice(0, PAGE_SIZE);
+                    } else batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PAGE_SIZE);
+                    if (batch.length > 0) filterCacheRef.current[f] = { assets: batch, currentIndex: 0 };
+                  }
+                }, 500);
+              }
+            });
           }
         } else {
           // JS fallback — sequential page-by-page loading
@@ -348,61 +402,8 @@ export default function SwipeScreen() {
 
   useEffect(() => { if (persistLoaded) loadAssets(activeFilter); }, [persistLoaded]);
 
-  // Prefetch first 25 of each filter in the background after initial load
+  // Prefetch ref — used by the native cache callback
   const prefetchedRef = useRef(false);
-  useEffect(() => {
-    if (loading || !allAssetsCache.current || prefetchedRef.current) return;
-    prefetchedRef.current = true;
-
-    const prefetch = async () => {
-      const idsToSkip = new Set(seenIdsRef.current);
-      for (const a of assetsRef.current || []) idsToSkip.add(a.id);
-      const cached = allAssetsCache.current;
-      const PREFETCH_SIZE = PAGE_SIZE; // Full 200 — all from cached data, instant
-
-      const filters = ['oldest', 'newest', 'all', 'largest', 'photos', 'videos'];
-      for (const f of filters) {
-        if (f === activeFilter) continue; // already loaded
-        if (filterCacheRef.current[f]) continue; // already cached
-
-        let batch = [];
-        if (f === 'oldest') {
-          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
-          batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
-        } else if (f === 'newest') {
-          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
-          batch = unseen.sort((a, b) => b.creationTime - a.creationTime).slice(0, PREFETCH_SIZE);
-        } else if (f === 'all') {
-          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
-          // Shuffle
-          const arr = [...unseen];
-          for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-          }
-          batch = arr.slice(0, PREFETCH_SIZE);
-        } else if (f === 'largest') {
-          // File sizes already in cached data — just sort
-          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
-          batch = unseen.sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0)).slice(0, PREFETCH_SIZE);
-        } else if (f === 'photos') {
-          const unseen = cached.filter((a) => a.mediaType === 'photo' && !idsToSkip.has(a.id));
-          batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
-        } else if (f === 'videos') {
-          const unseen = cached.filter((a) => a.mediaType === 'video' && !idsToSkip.has(a.id));
-          batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
-        }
-
-        if (batch.length > 0) {
-          filterCacheRef.current[f] = { assets: batch, currentIndex: 0 };
-        }
-      }
-    };
-
-    // Delay prefetch to not compete with the active filter
-    // Phase 1 done → prefetch after 2s so UI is settled
-    setTimeout(prefetch, 2000);
-  }, [loading]);
 
   // Daily limit reset removed — was temporary for testing
 
