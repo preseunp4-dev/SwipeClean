@@ -20,7 +20,10 @@ export function formatDuration(seconds, fallback = '') {
 
 export function formatDate(timestamp) {
   if (!timestamp) return '—';
-  const d = new Date(timestamp);
+  // Timestamps < 1e12 are in seconds (Unix), convert to milliseconds
+  const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+  const d = new Date(ms);
+  if (d.getFullYear() < 2000) return '—'; // Invalid date fallback
   return d.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
