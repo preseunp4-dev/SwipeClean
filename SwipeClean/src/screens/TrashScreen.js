@@ -623,7 +623,7 @@ export default function TrashScreen() {
       {previewIndex !== null && (
         <Modal visible transparent statusBarTranslucent onRequestClose={() => setPreviewIndex(null)}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,1)'] }) }]} />
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: dismissBg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.95)'] }) }]} />
           <PanGestureHandler
             ref={panRef}
             onGestureEvent={onDismissGesture}
@@ -649,8 +649,8 @@ export default function TrashScreen() {
               }}
               keyExtractor={(item) => item.id}
               renderItem={({ item, index }) => {
-                const padTop = insets.top + 23;
-                const padBottom = insets.bottom + 6;
+                const padTop = insets.top + 58;
+                const padBottom = insets.bottom + 41;
                 const availW = SCREEN_WIDTH - 16;
                 const availH = SCREEN_HEIGHT - padTop - padBottom;
                 const aspect = (item.width && item.height) ? item.width / item.height : 3 / 4;
