@@ -141,7 +141,7 @@ export default {
     trashed: 'Weggegooid',
     kept: 'Bewaard',
     ratio: 'Bewaren vs. weggooien',
-    ratioText: '%{percent}% van je foto\'s gemarkeerd als verwijderen',
+    ratioText: '%{percent}% van je foto\'s gemarkeerd voor verwijderen',
     storage: 'Opslag',
     toBeFreed: 'Vrij te maken',
     keeping: 'Bewaren',
