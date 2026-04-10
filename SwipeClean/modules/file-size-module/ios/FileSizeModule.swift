@@ -1,5 +1,7 @@
 import ExpoModulesCore
 import Photos
+import CoreImage
+import Accelerate
 
 public class FileSizeModule: Module {
   public func definition() -> ModuleDefinition {
@@ -119,6 +121,7 @@ public class FileSizeModule: Module {
       struct AssetData {
         let id: String; let time: Double; let width: Int; let height: Int
         var size: Int64; let mediaType: String; let duration: Double; let uri: String
+        var pHash: UInt64
       }
 
       // First pass: collect all assets (fast — no file size yet)
@@ -134,9 +137,10 @@ public class FileSizeModule: Module {
         }
       }
 
-      // Second pass: get file sizes concurrently
-      var allAssets = Array<AssetData>(repeating: AssetData(id: "", time: 0, width: 0, height: 0, size: 0, mediaType: "", duration: 0, uri: ""), count: rawAssets.count)
+      // Second pass: get file sizes + perceptual hashes concurrently
+      var allAssets = Array<AssetData>(repeating: AssetData(id: "", time: 0, width: 0, height: 0, size: 0, mediaType: "", duration: 0, uri: "", pHash: 0), count: rawAssets.count)
       let lock = NSLock()
+      let imageManager = PHImageManager.default()
 
       DispatchQueue.concurrentPerform(iterations: rawAssets.count) { i in
         let (asset, typeStr) = rawAssets[i]
@@ -145,6 +149,51 @@ public class FileSizeModule: Module {
         for resource in resources {
           if let size = resource.value(forKey: "fileSize") as? Int64 { totalSize += size }
         }
+
+        // Compute perceptual hash (8x8 grayscale → average → 64-bit hash)
+        var hash: UInt64 = 0
+        let options = PHImageRequestOptions()
+        options.isSynchronous = true
+        options.deliveryMode = .fastFormat
+        options.isNetworkAccessAllowed = false
+        options.resizeMode = .fast
+        let hashSize = CGSize(width: 8, height: 8)
+
+        let sem = DispatchSemaphore(value: 0)
+        imageManager.requestImage(for: asset, targetSize: hashSize, contentMode: .aspectFill, options: options) { image, _ in
+          defer { sem.signal() }
+          guard let img = image, let cgImage = img.cgImage else { return }
+
+          // Get 8x8 pixel data
+          let w = cgImage.width, h = cgImage.height
+          guard w > 0 && h > 0 else { return }
+          var pixels = [UInt8](repeating: 0, count: w * h * 4)
+          guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8,
+            bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+          ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+
+          // Convert to grayscale values
+          var grays = [Double]()
+          for p in stride(from: 0, to: min(64 * 4, pixels.count), by: 4) {
+            let gray = Double(pixels[p]) * 0.299 + Double(pixels[p+1]) * 0.587 + Double(pixels[p+2]) * 0.114
+            grays.append(gray)
+          }
+
+          guard grays.count >= 64 else { return }
+
+          // Average
+          let avg = grays.reduce(0, +) / Double(grays.count)
+
+          // Build hash: each bit = 1 if pixel > average
+          var h: UInt64 = 0
+          for j in 0..<64 {
+            if grays[j] > avg { h |= (1 << j) }
+          }
+          hash = h
+        }
+        sem.wait()
+
         let data = AssetData(
           id: asset.localIdentifier,
           time: (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000,
@@ -153,7 +202,8 @@ public class FileSizeModule: Module {
           size: totalSize,
           mediaType: typeStr,
           duration: asset.duration,
-          uri: "ph://\(asset.localIdentifier)"
+          uri: "ph://\(asset.localIdentifier)",
+          pHash: hash
         )
         lock.lock()
         allAssets[i] = data
@@ -190,6 +240,13 @@ public class FileSizeModule: Module {
             if sizeA > 0 && sizeB > 0 {
               let ratio = Double(min(sizeA, sizeB)) / Double(max(sizeA, sizeB))
               if ratio < minSizeRatio { continue }
+            }
+            // Perceptual hash similarity — Hamming distance ≤ 10 means visually similar
+            let hashA = allAssets[i].pHash
+            let hashB = allAssets[j].pHash
+            if hashA != 0 && hashB != 0 {
+              let hamming = (hashA ^ hashB).nonzeroBitCount
+              if hamming > 10 { continue } // Too different visually
             }
             cluster.append(j)
             used.insert(allAssets[j].id)
@@ -230,7 +287,15 @@ public class FileSizeModule: Module {
 
       for (_, indices) in sizeMap {
         if indices.count < 2 { continue }
-        let assets: [[String: Any]] = indices.map { idx in
+        // Verify with pHash — only keep pairs that are visually similar
+        let validIndices = indices.filter { idx in
+          let a = remaining[idx]
+          let ref = remaining[indices[0]]
+          if a.pHash == 0 || ref.pHash == 0 { return true } // No hash — keep (benefit of doubt)
+          return (a.pHash ^ ref.pHash).nonzeroBitCount <= 10
+        }
+        if validIndices.count < 2 { continue }
+        let assets: [[String: Any]] = validIndices.map { idx in
           let a = remaining[idx]
           return [
             "id": a.id,

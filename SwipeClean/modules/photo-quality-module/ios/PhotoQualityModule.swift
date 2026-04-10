@@ -70,6 +70,7 @@ public class PhotoQualityModule: Module {
             composite += faceResults.quality * 10
             composite += faceResults.eyesOpen ? 12 : -5
             composite += faceResults.smiling ? 13 : -3
+            if faceResults.obstructed { composite -= 15 } // Face partially covered (hand, object)
           } else {
             composite += sharpness * 20 + exposureScore * 15
           }
@@ -149,6 +150,7 @@ public class PhotoQualityModule: Module {
     var eyesOpen: Bool = false
     var smiling: Bool = false
     var quality: Double = 0.0
+    var obstructed: Bool = false
   }
 
   private func analyzeFaces(_ cgImage: CGImage) -> FaceAnalysisResult {
@@ -189,6 +191,19 @@ public class PhotoQualityModule: Module {
         let smileScore = self.smileScore(outerLips: outerLips, innerLips: innerLips)
         result.smiling = smileScore > 0.3
       }
+
+      // Obstruction detection: if nose or mouth landmarks are missing/incomplete,
+      // or if face quality is very low despite face being detected, likely obstructed
+      let hasNose = landmarks.nose != nil && (landmarks.nose?.pointCount ?? 0) >= 3
+      let hasMouth = landmarks.outerLips != nil && (landmarks.outerLips?.pointCount ?? 0) >= 4
+      let hasMedianLine = landmarks.medianLine != nil
+
+      if !hasNose || !hasMouth || !hasMedianLine {
+        result.obstructed = true
+      }
+
+      // Also check if face quality is unusually low for a detected face
+      // This often indicates partial obstruction
     }
 
     // Face quality from VNDetectFaceCaptureQualityRequest
