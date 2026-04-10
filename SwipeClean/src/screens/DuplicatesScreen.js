@@ -603,12 +603,10 @@ export default function DuplicatesScreen() {
                         </View>
                       )}
                       <Pressable
-                        style={[styles.selectCircle, !isTrashed && { backgroundColor: colors.green, borderColor: colors.green }]}
+                        style={styles.selectCircle}
                         onPress={() => toggleTrash(group.id, asset.id)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        {!isTrashed && <Ionicons name="checkmark" size={14} color="#fff" />}
-                      </Pressable>
+                      />
                       {asset.fileSize > 0 && (
                         <Text style={[styles.thumbSize, { color: theme.textSecondary }]}>{formatBytes(asset.fileSize)}</Text>
                       )}
@@ -901,9 +899,9 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
