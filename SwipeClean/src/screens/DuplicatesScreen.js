@@ -590,11 +590,11 @@ export default function DuplicatesScreen() {
                         }
                       }}
                       activeOpacity={0.7}
-                      style={styles.thumbWrapper}
+                      style={[styles.thumbWrapper, isTrashed && { opacity: 0.35 }]}
                     >
                       <Image
                         source={{ uri: asset.uri }}
-                        style={[styles.thumb, isTrashed ? { borderColor: colors.red } : { borderColor: colors.green }, isBest && styles.bestThumb]}
+                        style={styles.thumb}
                         contentFit="cover"
                       />
                       {isBest && (
@@ -603,11 +603,11 @@ export default function DuplicatesScreen() {
                         </View>
                       )}
                       <Pressable
-                        style={[styles.selectCircle, isTrashed && { backgroundColor: colors.red, borderColor: colors.red }]}
+                        style={[styles.selectCircle, !isTrashed && { backgroundColor: colors.green, borderColor: colors.green }]}
                         onPress={() => toggleTrash(group.id, asset.id)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        {isTrashed && <Ionicons name="checkmark" size={14} color="#fff" />}
+                        {!isTrashed && <Ionicons name="checkmark" size={14} color="#fff" />}
                       </Pressable>
                       {asset.fileSize > 0 && (
                         <Text style={[styles.thumbSize, { color: theme.textSecondary }]}>{formatBytes(asset.fileSize)}</Text>
@@ -852,27 +852,20 @@ const styles = StyleSheet.create({
     width: THUMB_SIZE,
     height: THUMB_SIZE,
     borderRadius: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  bestThumb: {
-    borderColor: '#FFD60A',
-    borderWidth: 2,
   },
   bestBadge: {
     position: 'absolute',
     top: 4,
     left: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFD60A',
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    gap: 2,
+    borderWidth: 1,
+    borderColor: '#4CD964',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   bestBadgeText: {
-    color: '#000',
+    color: '#4CD964',
     fontSize: 9,
     fontWeight: '800',
   },
