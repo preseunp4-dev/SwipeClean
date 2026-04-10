@@ -12,7 +12,7 @@ import MilestoneOverlay from '../components/MilestoneOverlay';
 import { t } from '../i18n';
 import { useColors } from '../context/ColorContext';
 import * as Sharing from 'expo-sharing';
-import { getAllFileSizesSorted, getLargestUnseen, getAllAssetsNative, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
+import { getAllAssetsNative, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
 import { loadFileSizeCache, saveFileSizeCache } from '../utils/storage';
 import { sw } from '../utils/scale';
 
@@ -219,16 +219,11 @@ export default function SwipeScreen() {
         } else if (filter === 'newest') {
           batch = unseen.sort((a, b) => b.creationTime - a.creationTime).slice(0, PAGE_SIZE);
         } else if (filter === 'largest') {
-          if (fileSizeModuleAvailable) {
-            // Native module: get largest unseen assets — filtering + sorting all done natively
-            const seenArray = [...idsToSkip];
-            const sorted = await getLargestUnseen(seenArray, [1, 2], PAGE_SIZE);
-            // Match with unseen assets to get full asset objects
-            const unseenMap = {};
-            for (const a of unseen) unseenMap[a.id] = a;
-            batch = sorted
-              .filter((item) => unseenMap[item.id])
-              .map((item) => ({ ...unseenMap[item.id], fileSize: item.fileSize }));
+          if (allAssetsCache.current) {
+            // Use cached data — file sizes already loaded from native, just sort
+            batch = unseen
+              .sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0))
+              .slice(0, PAGE_SIZE);
           } else {
             // Fallback: use cached sizes if available, fetch only what's missing
             const unseenWithCache = unseen.map((a) => {
@@ -387,15 +382,9 @@ export default function SwipeScreen() {
           }
           batch = arr.slice(0, PREFETCH_SIZE);
         } else if (f === 'largest') {
-          if (fileSizeModuleAvailable) {
-            try {
-              const seenArray = [...idsToSkip];
-              const sorted = await getLargestUnseen(seenArray, [1, 2], PREFETCH_SIZE);
-              const unseenMap = {};
-              for (const a of cached) unseenMap[a.id] = a;
-              batch = sorted.filter((item) => unseenMap[item.id]).map((item) => ({ ...unseenMap[item.id], fileSize: item.fileSize }));
-            } catch {}
-          }
+          // File sizes already in cached data — just sort
+          const unseen = cached.filter((a) => !idsToSkip.has(a.id));
+          batch = unseen.sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0)).slice(0, PREFETCH_SIZE);
         } else if (f === 'photos') {
           const unseen = cached.filter((a) => a.mediaType === 'photo' && !idsToSkip.has(a.id));
           batch = unseen.sort((a, b) => a.creationTime - b.creationTime).slice(0, PREFETCH_SIZE);
