@@ -2,7 +2,7 @@
   "expo": {
     "name": "SwipeClean",
     "slug": "SwipeClean",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.pieterpreseun.swipeclean",
-      "buildNumber": "16",
+      "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "SwipeClean needs access to your photo library so you can swipe through and clean up your photos.",
