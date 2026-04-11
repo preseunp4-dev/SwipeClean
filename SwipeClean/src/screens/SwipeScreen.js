@@ -56,6 +56,7 @@ export default function SwipeScreen() {
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [muted, setMuted] = useState(false);
   const [activeFilter, setActiveFilter] = useState('oldest');
+  const activeFilterRef = useRef('oldest');
   const [enterFrom, setEnterFrom] = useState(null);
   const filterCacheRef = useRef({});
   const fileSizeCache = useRef({});
@@ -190,9 +191,10 @@ export default function SwipeScreen() {
                   const idsToSkipNow = new Set(seenIdsRef.current);
                   for (const a of assetsRef.current || []) idsToSkipNow.add(a.id);
                   const cached = allAssetsCache.current;
+                  const currentFilter = activeFilterRef.current;
                   const filters = ['oldest', 'newest', 'all', 'largest', 'photos', 'videos'];
                   for (const f of filters) {
-                    if (f === activeFilter || filterCacheRef.current[f]) continue;
+                    if (f === currentFilter || filterCacheRef.current[f]) continue;
                     let batch = [];
                     const unseen = f === 'photos' ? cached.filter((a) => a.mediaType === 'photo' && !idsToSkipNow.has(a.id))
                       : f === 'videos' ? cached.filter((a) => a.mediaType === 'video' && !idsToSkipNow.has(a.id))
@@ -483,13 +485,13 @@ export default function SwipeScreen() {
     // No cleanup here — the unmount effect above handles cancellation
   }, [loading]);
 
-  // Keep cache in sync as user swipes through current filter (use refs to avoid re-render deps)
+  // Keep cache in sync as user swipes — only on index change, NOT on filter change
   useEffect(() => {
     const cur = assetsRef.current;
-    if (cur.length > 0 && !loading) {
-      filterCacheRef.current[activeFilter] = { assets: cur, currentIndex };
+    if (cur.length > 0 && !loading && currentIndex > 0) {
+      filterCacheRef.current[activeFilterRef.current] = { assets: cur, currentIndex };
     }
-  }, [currentIndex, activeFilter, loading]);
+  }, [currentIndex]);
 
   const handleFilterChange = (key) => {
     if (key === activeFilter) return;
@@ -500,6 +502,7 @@ export default function SwipeScreen() {
     }
 
     setActiveFilter(key);
+    activeFilterRef.current = key;
 
     // Restore from cache if available
     const cached = filterCacheRef.current[key];
