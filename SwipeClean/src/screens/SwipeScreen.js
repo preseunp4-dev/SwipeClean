@@ -130,8 +130,8 @@ export default function SwipeScreen() {
         setLoadProgress({ loaded: 0, total: 0 });
         progressAnim.setValue(0);
 
-        // If cache is ready, use it instantly. Otherwise use fast MediaLibrary for first load.
-        if (allAssetsCache.current) {
+        // If cache is ready, use it instantly (except screenshots which need album filtering).
+        if (allAssetsCache.current && filter !== 'screenshots') {
           // Cache available — instant filter from memory
           if (loadPhotos && loadVideos) {
             allAssets = allAssetsCache.current;
@@ -150,14 +150,18 @@ export default function SwipeScreen() {
           let cursor = undefined;
           let hasNext = true;
           let knownTotal = 0;
-          // Load first batch quickly
+          // Load first batch quickly — sort matches filter direction
+          const sortAsc = filter === 'oldest' || filter === 'photos' || filter === 'all';
+          const sortOrder = sortAsc
+            ? [[MediaLibrary.SortBy.creationTime, true]]   // ascending (oldest first)
+            : [[MediaLibrary.SortBy.creationTime, false]];  // descending (newest first)
           while (hasNext && allAssets.length < PAGE_SIZE * 2) {
             if (myLoadId !== loadIdRef.current) return;
             const r = await MediaLibrary.getAssetsAsync({
               first: 500,
               after: cursor || undefined,
               mediaType: loadVideos && !loadPhotos ? MediaLibrary.MediaType.video : MediaLibrary.MediaType.photo,
-              sortBy: [MediaLibrary.SortBy.creationTime],
+              sortBy: sortOrder,
             });
             if (!cursor) {
               libraryTotal += r.totalCount;
