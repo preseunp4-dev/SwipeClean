@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet, View, Platform } from 'react-native';
+import { StyleSheet, View, Image, Platform } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import OnboardingScreenV2 from './src/screens/OnboardingScreenV2';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { showOnboardingRef } from './src/utils/onboardingRef';
+import { splashRef } from './src/utils/splashRef';
 
 const Tab = createBottomTabNavigator();
 
@@ -49,7 +50,7 @@ function MainTabs() {
       <Tab.Navigator
         initialRouteName="Swipe"
         screenOptions={({ route }) => ({
-          lazy: false,
+          lazy: true,
           headerShown: false,
           tabBarStyle: {
             backgroundColor: theme.card,
@@ -85,6 +86,18 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(null);
   showOnboardingRef.current = setShowOnboarding;
 
+  // Custom splash overlay — covers the app from first React render until the
+  // first photo batch is actually ready inside SwipeScreen. Visually matches
+  // the native splash (same bg, same icon) so the transition is seamless.
+  const [splashVisible, setSplashVisible] = useState(true);
+  const splashHiddenRef = useRef(false);
+  const hideSplash = () => {
+    if (splashHiddenRef.current) return;
+    splashHiddenRef.current = true;
+    setSplashVisible(false);
+  };
+  splashRef.current = hideSplash;
+
   useEffect(() => {
     SecureStore.getItemAsync('onboarding_done').then((val) => {
       setShowOnboarding(val !== 'true' ? 'v1' : false);
@@ -93,9 +106,17 @@ export default function App() {
       NavigationBar.setVisibilityAsync('hidden');
       NavigationBar.setBehaviorAsync('overlay-swipe');
     }
+    // Safety: never leave the user stuck on the splash if something goes
+    // wrong (permission denied, empty library, native module error).
+    const fallback = setTimeout(hideSplash, 6000);
+    return () => clearTimeout(fallback);
   }, []);
 
-  if (showOnboarding === null) return <View style={styles.root} />;
+  // If onboarding is showing, hide the splash immediately — onboarding is its
+  // own fullscreen experience and doesn't depend on photos being loaded.
+  useEffect(() => {
+    if (showOnboarding) hideSplash();
+  }, [showOnboarding]);
 
   const OnboardingComponent = showOnboarding === 'v2' ? OnboardingScreenV2 : OnboardingScreen;
 
@@ -113,6 +134,16 @@ export default function App() {
             <OnboardingComponent onDone={() => setShowOnboarding(false)} />
           </View>
         )}
+        {splashVisible && (
+          <View style={styles.splash} pointerEvents="auto">
+            <Image
+              source={require('./assets/splash-icon.png')}
+              style={styles.splashIcon}
+              resizeMode="contain"
+              fadeDuration={0}
+            />
+          </View>
+        )}
       </AppProvider>
       </PurchaseProvider>
       </ColorProvider>
@@ -126,5 +157,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#111',
+  },
+  splash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashIcon: {
+    width: '50%',
+    height: '50%',
   },
 });

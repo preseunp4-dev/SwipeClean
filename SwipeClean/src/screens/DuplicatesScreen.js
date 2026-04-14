@@ -21,7 +21,6 @@ import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootV
 import { Image } from 'expo-image';
 import ZoomableImage from '../components/ZoomableImage';
 import { Ionicons } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
 import { useApp } from '../context/AppContext';
 import { usePurchases } from '../context/PurchaseContext';
 import { useColors } from '../context/ColorContext';
@@ -30,14 +29,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '../i18n';
 import { sw, sh } from '../utils/scale';
-import { analyzePhotos, isAvailable as photoQualityAvailable } from '../../modules/photo-quality-module';
-import { findDuplicateGroups as findDuplicateGroupsNative, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
+import * as duplicatesStore from '../utils/duplicatesStore';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const TIME_WINDOW_MS = 5000;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const THUMB_SIZE = Math.floor((SCREEN_W - 6) / 3);
 
@@ -271,182 +268,44 @@ export default function DuplicatesScreen() {
   const expandedGroupRef = useRef(null);
   const thumbRefs = useRef({});
 
-  // Load dismissed groups and auto-scan on mount
+  // Load dismissed groups on mount
   useEffect(() => {
     loadDismissedGroups().then(setDismissedKeys);
   }, []);
 
-  const hasScannedRef = useRef(false);
+  // Keep a ref to dismissedKeys so the store subscriber sees the latest value.
+  const dismissedKeysRef = useRef(dismissedKeys);
+  useEffect(() => { dismissedKeysRef.current = dismissedKeys; }, [dismissedKeys]);
 
-  const scan = useCallback(async () => {
-    setPhase('scanning');
-    setProgress({ loaded: 0, total: 0 });
-
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          t('duplicates.permissionTitle'),
-          t('duplicates.permissionMessage'),
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('swipe.openSettings'), onPress: () => Linking.openSettings() },
-          ]
-        );
-        setPhase('idle');
-        return;
-      }
-
-      let foundGroups = [];
-
-      if (fileSizeModuleAvailable) {
-        // NATIVE path — all scanning done in Swift/Kotlin, 10-50x faster
-        setProgress({ loaded: 0, total: 0 });
-        const nativeGroups = await findDuplicateGroupsNative([1, 2], TIME_WINDOW_MS, 0.5);
-        foundGroups = nativeGroups.map((g) => ({
-          ...g,
-          trashIds: new Set(),
-        }));
-        setProgress({ loaded: foundGroups.length, total: foundGroups.length });
-      } else {
-        // JS fallback for Expo Go
-        let allAssets = [];
-        let hasMore = true;
-        let cursor = undefined;
-        while (hasMore) {
-          const page = await MediaLibrary.getAssetsAsync({
-            first: 500, after: cursor, mediaType: MediaLibrary.MediaType.photo,
-            sortBy: [MediaLibrary.SortBy.creationTime],
-          });
-          allAssets.push(...page.assets);
-          hasMore = page.hasNextPage;
-          if (page.assets.length > 0) cursor = page.assets[page.assets.length - 1].id;
-          setProgress({ loaded: allAssets.length, total: 0 });
-        }
-        hasMore = true; cursor = undefined;
-        while (hasMore) {
-          const page = await MediaLibrary.getAssetsAsync({
-            first: 500, after: cursor, mediaType: MediaLibrary.MediaType.video,
-            sortBy: [MediaLibrary.SortBy.creationTime],
-          });
-          allAssets.push(...page.assets);
-          hasMore = page.hasNextPage;
-          if (page.assets.length > 0) cursor = page.assets[page.assets.length - 1].id;
-          setProgress({ loaded: allAssets.length, total: 0 });
-        }
-        setProgress({ loaded: allAssets.length, total: allAssets.length });
-        allAssets.sort((a, b) => a.creationTime - b.creationTime);
-
-        const used = new Set();
-        let groupIdCounter = 0;
-        let windowStart = 0;
-        for (let i = 0; i < allAssets.length; i++) {
-          while (windowStart < i && allAssets[i].creationTime - allAssets[windowStart].creationTime > TIME_WINDOW_MS) windowStart++;
-          if (used.has(allAssets[i].id)) continue;
-          const cluster = [allAssets[i]]; used.add(allAssets[i].id);
-          for (let j = windowStart; j < allAssets.length; j++) {
-            if (j === i) continue;
-            if (allAssets[j].creationTime - allAssets[i].creationTime > TIME_WINDOW_MS) break;
-            if (used.has(allAssets[j].id)) continue;
-            if (allAssets[j].width === allAssets[i].width && allAssets[j].height === allAssets[i].height) {
-              const sizeA = allAssets[i].fileSize || 0, sizeB = allAssets[j].fileSize || 0;
-              if (sizeA > 0 && sizeB > 0 && Math.min(sizeA, sizeB) / Math.max(sizeA, sizeB) < 0.5) continue;
-              cluster.push(allAssets[j]); used.add(allAssets[j].id);
-            }
-          }
-          if (cluster.length >= 2) foundGroups.push({ id: `group-${groupIdCounter++}`, type: 'burst', assets: cluster, trashIds: new Set() });
-        }
-        const remaining = allAssets.filter((a) => !used.has(a.id));
-        const sizeMap = new Map();
-        for (const a of remaining) { if (!a.fileSize || a.fileSize === 0) continue; const key = `${a.fileSize}_${a.width}x${a.height}`; if (!sizeMap.has(key)) sizeMap.set(key, []); sizeMap.get(key).push(a); }
-        for (const [, assets] of sizeMap) { if (assets.length >= 2) foundGroups.push({ id: `group-${groupIdCounter++}`, type: 'duplicate', assets, trashIds: new Set() }); }
-      }
-
-      // Filter out previously dismissed groups
-      const currentDismissed = await loadDismissedGroups();
-      setDismissedKeys(currentDismissed);
-      const visibleGroups = foundGroups.filter((g) => !currentDismissed.has(groupKey(g.assets)));
-
-      // Analyze photo quality in progressive batches
-      // First 25, then batches of 50
-      if (photoQualityAvailable && visibleGroups.length > 0) {
-        const FIRST_BATCH = 25;
-        const NEXT_BATCH = 50;
-        let processed = 0;
-        const analyzedGroups = [];
-
-        const analyzeGroup = async (group) => {
-          try {
-            const ids = group.assets.map((a) => a.id);
-            const scores = await analyzePhotos(ids);
-            const scoreMap = {};
-            for (const s of scores) scoreMap[s.id] = s.compositeScore;
-            let bestId = group.assets[0].id;
-            let bestScore = -1;
-            for (const asset of group.assets) {
-              const score = scoreMap[asset.id] || 0;
-              if (score > bestScore) { bestScore = score; bestId = asset.id; }
-            }
-            group.assets = [
-              ...group.assets.filter((a) => a.id === bestId),
-              ...group.assets.filter((a) => a.id !== bestId),
-            ];
-            group.bestId = bestId;
-            group.trashIds = new Set(group.assets.filter((a) => a.id !== bestId).map((a) => a.id));
-          } catch (e) { /* skip */ }
-        };
-
-        setProgress({ loaded: 0, total: visibleGroups.length });
-
-        // First batch: analyze 25 groups, then show them
-        const firstEnd = Math.min(FIRST_BATCH, visibleGroups.length);
-        for (let i = 0; i < firstEnd; i++) {
-          await analyzeGroup(visibleGroups[i]);
-          analyzedGroups.push(visibleGroups[i]);
-          processed++;
-          setProgress({ loaded: processed, total: visibleGroups.length });
-        }
-        setGroups([...analyzedGroups]);
-        setPhase('done');
-
-        // Remaining batches: analyze 50 at a time, append when batch is complete
-        let batchStart = firstEnd;
-        while (batchStart < visibleGroups.length) {
-          const batchEnd = Math.min(batchStart + NEXT_BATCH, visibleGroups.length);
-          const batchGroups = [];
-          for (let i = batchStart; i < batchEnd; i++) {
-            await analyzeGroup(visibleGroups[i]);
-            batchGroups.push(visibleGroups[i]);
-            processed++;
-            setProgress({ loaded: processed, total: visibleGroups.length });
-          }
-          // Use functional update to avoid stale state
-          const newBatch = [...batchGroups];
-          setGroups((prev) => [...prev, ...newBatch]);
-          batchStart = batchEnd;
-          // Small delay to let React render the update
-          await new Promise((r) => setTimeout(r, 50));
-        }
-        setProgress({ loaded: visibleGroups.length, total: visibleGroups.length });
-      } else {
-        // No AI — show all groups immediately
-        setGroups(visibleGroups);
-        setPhase('done');
-      }
-    } catch (err) {
-      console.warn('Scan error:', err);
-      Alert.alert(t('common.error'), t('duplicates.errorMessage'));
-      setPhase('idle');
-    }
+  // Subscribe to the duplicates store. SwipeScreen kicks off the scan at
+  // startup, so by the time this tab is opened, results are usually already
+  // streaming in. We also call startScan() here as a safety fallback —
+  // it's a no-op if the scan is already running.
+  useEffect(() => {
+    const unsub = duplicatesStore.subscribe((s) => {
+      setPhase(s.phase);
+      setProgress(s.progress);
+      setGroups((prev) => {
+        const prevMap = new Map(prev.map((g) => [g.id, g]));
+        const dismissed = dismissedKeysRef.current;
+        // Preserve any local modifications (trashIds, bestId) on existing
+        // groups; append newly analyzed groups from the store.
+        return s.groups
+          .filter((g) => !dismissed.has(groupKey(g.assets)))
+          .map((g) => prevMap.get(g.id) || g);
+      });
+    });
+    duplicatesStore.startScan();
+    return () => unsub();
   }, []);
 
-  // Auto-scan — small delay to let swipe screen show first photo
-  useEffect(() => {
-    if (!hasScannedRef.current) {
-      hasScannedRef.current = true;
-      const timer = setTimeout(() => scan(), 2000);
-      return () => clearTimeout(timer);
-    }
+  // Manual rescan — used by the refresh button in the header.
+  const rescan = useCallback(() => {
+    setGroups([]);
+    setDismissedKeys(new Set());
+    saveDismissedGroups(new Set());
+    duplicatesStore.reset();
+    duplicatesStore.startScan();
   }, []);
 
   const toggleTrash = (groupId, assetId) => {
@@ -518,7 +377,7 @@ export default function DuplicatesScreen() {
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           {t('duplicates.subtitle')}
         </Text>
-        <TouchableOpacity style={styles.scanButton} onPress={scan} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.scanButton} onPress={rescan} activeOpacity={0.7}>
           <Ionicons name="search" size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.scanButtonText}>{t('duplicates.scanLibrary')}</Text>
         </TouchableOpacity>
@@ -693,7 +552,7 @@ export default function DuplicatesScreen() {
                 t('duplicates.rescanMessage'),
                 [
                   { text: t('common.cancel'), style: 'cancel' },
-                  { text: t('duplicates.scanAgain'), onPress: () => { setGroups([]); setDismissedKeys(new Set()); saveDismissedGroups(new Set()); scan(); } },
+                  { text: t('duplicates.scanAgain'), onPress: rescan },
                 ]
               );
             }}
