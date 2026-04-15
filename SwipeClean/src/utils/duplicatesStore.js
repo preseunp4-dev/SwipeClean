@@ -24,7 +24,7 @@ import { loadDismissedGroups } from './storage';
 
 const TIME_WINDOW_MS = 5000;
 const MIN_SIZE_RATIO = 0.5;
-const AI_BATCH = 50;
+const AI_BATCH = 25;
 
 const initialState = {
   phase: 'idle',           // 'idle' | 'scanning' | 'analyzing' | 'done' | 'error'
