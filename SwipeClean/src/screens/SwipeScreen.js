@@ -263,6 +263,8 @@ export default function SwipeScreen() {
         if (activeFilterRef.current === 'screenshots') {
           dispatch({ type: 'APPEND_ASSETS', payload: fresh });
         }
+        // Warm first few so they're ready by the time the user reaches them
+        warmupCards(fresh, 3);
         return;
       }
 
@@ -283,12 +285,13 @@ export default function SwipeScreen() {
       if (activeFilterRef.current === filter) {
         dispatch({ type: 'APPEND_ASSETS', payload: newBatch });
       }
+      warmupCards(newBatch, 3);
     } catch (e) {
       console.warn(`topUpCategory(${filter}) failed:`, e?.message);
     } finally {
       topUpInFlightRef.current[filter] = false;
     }
-  }, [dispatch]);
+  }, [dispatch, warmupCards]);
 
   // -----------------------------------------------------------------------
   // Phase 1 helper: fetch INITIAL_BATCH unseen for a single category via
@@ -324,7 +327,11 @@ export default function SwipeScreen() {
 
       if (activeFilterRef.current === filter) {
         dispatch({ type: 'SET_ASSETS', payload: batch });
-        warmupCards(batch);
+        warmupCards(batch, 5);
+      } else {
+        // Warm up fewer cards for non-active filters — just enough so the
+        // first image is ready if the user taps into this filter.
+        warmupCards(batch, 3);
       }
       return batch;
     } catch (e) {
@@ -351,7 +358,11 @@ export default function SwipeScreen() {
       filterCacheRef.current[f] = { assets: batch, currentIndex: 0 };
       if (activeFilterRef.current === f) {
         dispatch({ type: 'SET_ASSETS', payload: batch });
-        warmupCards(batch);
+        warmupCards(batch, 5);
+      } else {
+        // Warm up first 3 of each non-active filter so the first card is
+        // ready the moment the user taps in.
+        warmupCards(batch, 3);
       }
     }
   }, [dispatch, warmupCards]);
