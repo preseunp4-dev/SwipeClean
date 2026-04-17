@@ -59,11 +59,29 @@ export async function getAssetsPage(mediaTypes = [1, 2], count = 25, oldestFirst
 
 /**
  * Find duplicate groups natively — burst detection + exact duplicates.
+ * Uses LAZY evaluation: only computes pHash / fileSize for burst candidates,
+ * not every asset. Safe on huge libraries (no OOM crash).
  * Returns array of { id, type, assets: [{ id, mediaType, width, height, creationTime, duration, fileSize, uri }] }.
  */
 export async function findDuplicateGroups(mediaTypes = [1, 2], timeWindowMs = 5000, minSizeRatio = 0.5) {
   if (!nativeModule) return [];
   return nativeModule.findDuplicateGroups(mediaTypes, timeWindowMs, minSizeRatio);
+}
+
+/**
+ * Largest unseen assets via proxy scoring.
+ * Fast on any library size — scans metadata in one pass, picks top K candidates
+ * by proxy (width × height × duration), fetches real fileSize only for those,
+ * returns top `limit` by actual size. Safe: bounded PHAssetResource calls.
+ *
+ * @param mediaTypes [1]=photos, [2]=videos, [1,2]=both
+ * @param limit number of items to return (top by real fileSize)
+ * @param seenIds asset IDs to exclude
+ * @returns array of { id, mediaType, width, height, duration, creationTime, uri, fileSize }
+ */
+export async function getLargestProxy(mediaTypes = [1, 2], limit = 50, seenIds = []) {
+  if (!nativeModule || typeof nativeModule.getLargestProxy !== 'function') return [];
+  return nativeModule.getLargestProxy(mediaTypes, limit, seenIds);
 }
 
 export const isAvailable = nativeModule != null;

@@ -12,8 +12,7 @@ import MilestoneOverlay from '../components/MilestoneOverlay';
 import { t } from '../i18n';
 import { useColors } from '../context/ColorContext';
 import * as Sharing from 'expo-sharing';
-import { getAllAssetsNative, getAssetsPage, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
-import { loadFileSizeCache, saveFileSizeCache } from '../utils/storage';
+import { getAssetsPage, getLargestProxy, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
 import { sw } from '../utils/scale';
 import { splashRef } from '../utils/splashRef';
 import * as duplicatesStore from '../utils/duplicatesStore';
@@ -89,18 +88,9 @@ export default function SwipeScreen() {
   const activeFilterRef = useRef('oldest');
   const [enterFrom, setEnterFrom] = useState(null);
   const filterCacheRef = useRef({});
-  const fileSizeCache = useRef({});
-  const fileSizeCacheLoaded = useRef(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const loadIdRef = useRef(0);
-  const allAssetIdsRef = useRef(null); // All library asset IDs for background preload
-  const allAssetsCache = useRef(null); // Cached native assets — avoids re-fetching 100K items
-  const bgPreloadRef = useRef(null);   // Background preload cancel token
-  const filterLoadingRef = useRef(false); // True while a filter load is fetching file sizes
-  // Flipped once the native asset cache is built. Kicks the file-size
-  // preloader effect below once the IDs are actually available.
-  const [nativeCacheReady, setNativeCacheReady] = useState(false);
   const isFocused = useIsFocused();
   const navigation = useNavigation();
 
@@ -130,7 +120,6 @@ export default function SwipeScreen() {
 
   // Refs for the load pipeline
   const screenshotAlbumRef = useRef(undefined); // undefined = not looked up, null = none, obj = found
-  const phase2DoneRef = useRef(false);
   const topUpInFlightRef = useRef({});
 
   // -----------------------------------------------------------------------
@@ -245,11 +234,11 @@ export default function SwipeScreen() {
   // Fires when the user swipes within TOPUP_THRESHOLD of the active batch's
   // end. No-op if a top-up for this filter is already in flight.
   //
-  // Strategy (from fastest to fallback):
-  //   a) If the native all-library cache is ready, slice from it (instant)
-  //   b) Else use getAssetsPage with a creationTime cursor from the last
-  //      asset in the current buffer — fast on any library size
-  //   c) Screenshots is always album-based (unchanged)
+  // Strategy per filter:
+  //   screenshots — album-based MediaLibrary.getAssetsAsync
+  //   largest     — getLargestProxy with seen + existing excluded
+  //   all         — getAssetsPage (newest 500) + shuffle + filter
+  //   oldest/newest/photos/videos — getAssetsPage with creationTime cursor
   // -----------------------------------------------------------------------
   const topUpCategory = useCallback(async (filter) => {
     if (topUpInFlightRef.current[filter]) return;
@@ -281,37 +270,30 @@ export default function SwipeScreen() {
         return;
       }
 
-      // Largest needs the full native cache (needs fileSize). If the cache
-      // isn't ready yet, skip — the user sees their current buffer until
-      // the duplicate scan finishes and the cache gets built.
-      if (filter === 'largest' && !allAssetsCache.current) return;
-
       const existing = filterCacheRef.current[filter]?.assets || [];
       const existingIds = new Set(existing.map((a) => a.id));
       const seen = seenIdsRef.current;
 
-      // Hot path: full native cache is ready, slice from memory.
-      if (allAssetsCache.current) {
-        const unseen = allAssetsCache.current.filter(
-          (a) => !seen.has(a.id) && !existingIds.has(a.id)
-        );
-        const sorted = applyFilter(filter, unseen);
-        const newBatch = sorted.slice(0, TOPUP_SIZE);
-        if (newBatch.length === 0) return;
-        const prev = filterCacheRef.current[filter] || { assets: [], currentIndex: 0 };
-        filterCacheRef.current[filter] = {
-          assets: [...prev.assets, ...newBatch],
+      // Largest: re-run proxy scan with the existing buffer's IDs added to
+      // seen so we get the NEXT top-by-size items we haven't shown yet.
+      if (filter === 'largest') {
+        if (!fileSizeModuleAvailable) return;
+        const excludeIds = [...seen, ...existing.map((a) => a.id)];
+        const raw = await getLargestProxy([1, 2], TOPUP_SIZE, excludeIds);
+        if (!raw || raw.length === 0) return;
+        const prev = filterCacheRef.current.largest || { assets: [], currentIndex: 0 };
+        filterCacheRef.current.largest = {
+          assets: [...prev.assets, ...raw],
           currentIndex: prev.currentIndex,
         };
-        if (activeFilterRef.current === filter) {
-          dispatch({ type: 'APPEND_ASSETS', payload: newBatch });
+        if (activeFilterRef.current === 'largest') {
+          dispatch({ type: 'APPEND_ASSETS', payload: raw });
         }
-        warmupCards(newBatch);
+        warmupCards(raw);
         return;
       }
 
-      // Cursor path: native cache not ready. Use getAssetsPage with a
-      // creationTime cursor so we don't re-fetch the same first 25 again.
+      // Cursor-based fetch for oldest/newest/photos/videos/all
       if (!fileSizeModuleAvailable) return; // Expo Go — no page fetch
 
       const mediaTypes =
@@ -396,9 +378,20 @@ export default function SwipeScreen() {
       if (filter === 'screenshots') {
         batch = await fetchScreenshots(INITIAL_BATCH);
       } else if (filter === 'largest') {
-        // Largest requires file sizes — skip until native cache is ready
-        // (built after the duplicate scan completes, see buildNativeCache)
-        return [];
+        // Largest via proxy scoring — safe on any library size, no native
+        // cache needed. Fetches metadata for ALL assets (fast), picks top K
+        // candidates by width×height×duration proxy, then fetches real
+        // fileSize only for those K, returns top `INITIAL_BATCH` by real size.
+        if (!fileSizeModuleAvailable) return [];
+        const seen = Array.from(seenIdsRef.current);
+        const raw = await getLargestProxy([1, 2], INITIAL_BATCH, seen);
+        batch = raw;
+        filterCacheRef.current.largest = { assets: batch, currentIndex: 0 };
+        if (activeFilterRef.current === filter) {
+          dispatch({ type: 'SET_ASSETS', payload: batch });
+        }
+        warmupCards(batch);
+        return batch;
       } else {
         // Native-bridge fast path. Falls back to MediaLibrary only in Expo Go
         // where our native module isn't loaded.
@@ -473,80 +466,24 @@ export default function SwipeScreen() {
     }
   }, [dispatch, fetchScreenshots, warmupCards]);
 
-  // -----------------------------------------------------------------------
-  // Phase 2 (lazy): once the native all-library cache is ready, use it to
-  // fill/refresh the filters that benefit from it:
-  //   - 'largest' (needs accurate fileSize across the full library)
-  //   - 'all'     (truly random across the full library, not just recent)
-  // Phase 1 already populated oldest/newest/photos/videos/screenshots via
-  // getAssetsPage, so we don't overwrite those — the user may have already
-  // swiped into them.
-  // -----------------------------------------------------------------------
-  const phase2FillFromNativeCache = useCallback(() => {
-    if (phase2DoneRef.current) return;
-    phase2DoneRef.current = true;
-    const cache = allAssetsCache.current;
-    if (!cache) return;
-    const seen = seenIdsRef.current;
-    const filters = ['largest', 'all'];
-    for (const f of filters) {
-      // Don't clobber a filter the user has already started swiping through
-      const existing = filterCacheRef.current[f];
-      if (existing && existing.currentIndex > 0) continue;
-      const unseen = cache.filter((a) => !seen.has(a.id));
-      const sorted = applyFilter(f, unseen);
-      const batch = sorted.slice(0, BUFFER_TARGET);
-      filterCacheRef.current[f] = { assets: batch, currentIndex: 0 };
-      if (activeFilterRef.current === f) {
-        dispatch({ type: 'SET_ASSETS', payload: batch });
-      }
-      warmupCards(batch);
-    }
-  }, [dispatch, warmupCards]);
+  // NOTE: the all-library native cache (getAllAssetsNative) is NOT used
+  // anymore. On large libraries (even ~20K) it iterated PHAssetResource for
+  // every asset, which causes memory-pressure crashes. Largest now uses
+  // getLargestProxy (bounded, safe), and 'all' uses getAssetsPage (fast).
+  // The cache/build functions have been removed entirely.
 
   // -----------------------------------------------------------------------
-  // Build the native all-library cache. Called AFTER the duplicate scan
-  // finishes (not at launch) — this is what was hanging 80K-photo libraries
-  // previously. The cache enables:
-  //   - 'largest' filter (needs real file sizes)
-  //   - Fully-accurate 'all' (random from full library)
-  //   - Instant topup for every filter
-  // -----------------------------------------------------------------------
-  const buildNativeCache = useCallback(async () => {
-    if (!fileSizeModuleAvailable) return;
-    if (allAssetsCache.current) return;
-    try {
-      const nativeAssets = await getAllAssetsNative([1, 2]);
-      const cache = nativeAssets.map((a) => ({
-        ...a,
-        mediaType: a.mediaType === 'photo' ? 'photo' : 'video',
-      }));
-      allAssetsCache.current = cache;
-      allAssetIdsRef.current = cache.map((a) => a.id);
-      dispatch({ type: 'SET_LIBRARY_SIZE', payload: cache.length });
-      setNativeCacheReady(true);
-      // Now that cache is ready, fill 'largest' and 'all' properly
-      phase2FillFromNativeCache();
-    } catch (e) {
-      console.warn('buildNativeCache failed:', e?.message);
-    }
-  }, [dispatch, phase2FillFromNativeCache]);
-
-  // -----------------------------------------------------------------------
-  // Initial load orchestrator (Phase 1).
-  // Fast on any library size — uses native getAssetsPage (fetchLimit-based).
+  // Initial load orchestrator.
+  // Fast on any library size — each filter uses a bounded native call.
   //
   //   1. Permission check
   //   2. Wait for persistLoaded (so seenIds is populated)
-  //   3. Parallel-load 25 of each: oldest, newest, photos, videos, screenshots
-  //      (each call is ~50ms regardless of library size)
-  //   4. Whichever filter is active dispatches SET_ASSETS as soon as it
-  //      resolves — usually 'oldest' first.
+  //   3. Load 'oldest' serially (splash hides as soon as it returns)
+  //   4. Parallel-load 25 of each: newest, photos, videos, screenshots, largest
   //
   // What does NOT happen here:
-  //   - No getAllAssetsNative (would iterate 80K assets, 1-2min on huge libs)
+  //   - No all-library scan (the old buildNativeCache crashed on 20K+ libs)
   //   - No duplicate scan start (deferred 3s after first photo — see below)
-  //   - 'largest' and 'all' come in later via phase2FillFromNativeCache
   // -----------------------------------------------------------------------
   const initialLoad = useCallback(async () => {
     try {
@@ -560,13 +497,16 @@ export default function SwipeScreen() {
       // Load 'oldest' first so the splash can hide ASAP.
       await loadCategoryDirect('oldest');
 
-      // Other Phase-1 categories in parallel — all fast via getAssetsPage.
-      // User is already swiping oldest by now.
+      // Other Phase-1 categories in parallel — all fast.
+      // 'largest' now works directly via getLargestProxy (no cache needed),
+      // so it's included here and will populate in a few seconds alongside
+      // the others. User is already swiping oldest by now.
       Promise.all([
         loadCategoryDirect('newest'),
         loadCategoryDirect('photos'),
         loadCategoryDirect('videos'),
         loadCategoryDirect('screenshots'),
+        loadCategoryDirect('largest'),
       ]);
     } catch (err) {
       console.warn('initialLoad error:', err?.message);
@@ -579,37 +519,15 @@ export default function SwipeScreen() {
   // Used by handleFilterChange when filterCacheRef.current[key] is empty.
   // -----------------------------------------------------------------------
   const loadFilterBatch = useCallback(async (filter) => {
-    const myLoadId = ++loadIdRef.current;
     try {
-      // Special case: user tapped 'largest' but the native cache isn't built
-      // yet (happens if they tap it before the duplicate scan finishes).
-      // Kick off the build NOW, out of normal order, and wait for it.
-      // Cache build takes 10-60s on huge libs — shown as loading state.
-      if (filter === 'largest' && !allAssetsCache.current && fileSizeModuleAvailable) {
-        await buildNativeCache();
-        if (myLoadId !== loadIdRef.current) return;
-      }
-
-      // Hot path: native cache is ready, slice from memory
-      if (allAssetsCache.current && filter !== 'screenshots') {
-        if (!persistLoadedRef.current) await persistPromiseRef.current;
-        if (myLoadId !== loadIdRef.current) return;
-        const seen = seenIdsRef.current;
-        const unseen = allAssetsCache.current.filter((a) => !seen.has(a.id));
-        const sorted = applyFilter(filter, unseen);
-        const batch = sorted.slice(0, BUFFER_TARGET);
-        filterCacheRef.current[filter] = { assets: batch, currentIndex: 0 };
-        dispatch({ type: 'SET_ASSETS', payload: batch });
-        warmupCards(batch);
-        return;
-      }
-      // Cold path (or screenshots): direct MediaLibrary fetch
+      // All filters go through loadCategoryDirect, which handles each
+      // category's fetch strategy (getAssetsPage / getLargestProxy / album).
       await loadCategoryDirect(filter);
     } catch (err) {
       console.warn(`loadFilterBatch(${filter}) error:`, err?.message);
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [dispatch, loadCategoryDirect, warmupCards, buildNativeCache]);
+  }, [dispatch, loadCategoryDirect]);
 
   // Animate progress bar smoothly for largest filter
   useEffect(() => {
@@ -631,17 +549,9 @@ export default function SwipeScreen() {
     return () => loop.stop();
   }, [loading, loadingMore]);
 
-  // Load file size cache from disk on mount
-  useEffect(() => {
-    loadFileSizeCache().then((cache) => {
-      fileSizeCache.current = cache || {};
-      fileSizeCacheLoaded.current = true;
-    });
-  }, []);
-
   // Kick off initial load on mount. Uses native getAssetsPage (fetchLimit)
-  // so it's fast on any library size. Duplicate scan + native cache build
-  // do NOT run here — they're deferred until after the first photo shows.
+  // so it's fast on any library size. Duplicate scan is deferred 3s after
+  // the first photo shows (see splash-hide effect below).
   const didInitLoadRef = useRef(false);
   useEffect(() => {
     if (didInitLoadRef.current) return;
@@ -667,16 +577,6 @@ export default function SwipeScreen() {
     }
   }, [assets.length, loading]);
 
-  // Subscribe to the duplicates store. When the scan + AI pass fully
-  // finishes, kick off the all-library native cache build. This is the
-  // "eventually" plan: never at launch, only after dup work is done.
-  useEffect(() => {
-    const unsub = duplicatesStore.subscribe((s) => {
-      if (s.phase === 'done') buildNativeCache();
-    });
-    return () => unsub();
-  }, [buildNativeCache]);
-
   // Daily limit reset removed — was temporary for testing
 
   // Step 7: when the user gets within TOPUP_THRESHOLD of the end of the
@@ -689,71 +589,6 @@ export default function SwipeScreen() {
       topUpCategory(activeFilter);
     }
   }, [currentIndex, assets.length, activeFilter, topUpCategory]);
-
-  // Background file size preloader — runs ONCE after initial load, fetches sizes
-  // for all library assets so "Largest" filter is instant.
-  // Survives tab switches — only cancels on true unmount.
-  useEffect(() => {
-    return () => {
-      if (bgPreloadRef.current) bgPreloadRef.current.cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!nativeCacheReady || !allAssetIdsRef.current || !fileSizeCacheLoaded.current) return;
-    // Already running or completed — don't restart
-    if (bgPreloadRef.current) return;
-
-    const token = { cancelled: false };
-    bgPreloadRef.current = token;
-
-    const ids = allAssetIdsRef.current;
-    const CHUNK = 20;
-    const DELAY = 200; // ms between fetch chunks
-
-    let i = 0;
-
-    const processChunk = async () => {
-      if (token.cancelled) return;
-
-      // Yield to filter loads — retry after a delay instead of competing for the bridge
-      if (filterLoadingRef.current) {
-        setTimeout(processChunk, 500);
-        return;
-      }
-
-      // Scan forward, skipping cached IDs (instant — no delay for cached)
-      const toFetch = [];
-      while (toFetch.length < CHUNK && i < ids.length) {
-        const id = ids[i++];
-        if (!fileSizeCache.current[id]) toFetch.push(id);
-      }
-
-      // Nothing to fetch — either all cached or we've processed everything
-      if (toFetch.length === 0) {
-        saveFileSizeCache(fileSizeCache.current);
-        return;
-      }
-
-      // Fetch uncached sizes
-      await Promise.all(toFetch.map(async (id) => {
-        try {
-          const info = await MediaLibrary.getAssetInfoAsync(id);
-          if (info.fileSize > 0) fileSizeCache.current[id] = info.fileSize;
-        } catch {}
-      }));
-
-      // Periodic save every ~500 fetched
-      if (i % 500 < CHUNK) saveFileSizeCache(fileSizeCache.current);
-
-      // Continue with delay (only after actual fetches — cached chunks are instant)
-      if (!token.cancelled) setTimeout(processChunk, DELAY);
-    };
-
-    // Start after 2s to let the UI settle after initial load
-    setTimeout(processChunk, 2000);
-    // No cleanup here — the unmount effect above handles cancellation
-  }, [nativeCacheReady]);
 
   // Keep cache in sync as user swipes — only on index change, NOT on filter change
   useEffect(() => {
@@ -1022,10 +857,6 @@ export default function SwipeScreen() {
                     resetSeenIds();
                     // Clear in-memory caches so everything reloads fresh
                     filterCacheRef.current = {};
-                    phase2DoneRef.current = false;
-                    allAssetsCache.current = null;
-                    allAssetIdsRef.current = null;
-                    setNativeCacheReady(false);
                     initialLoad();
                   } },
                 ]
