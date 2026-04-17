@@ -281,23 +281,59 @@ export default function DuplicatesScreen() {
   // Assets we've already warmed up (iCloud download triggered + prefetched).
   const warmedUpIdsRef = useRef(new Set());
 
-  // warmupGroupAssets — for each asset in the passed groups, fire-and-forget
-  //   1. Image.prefetch (warms expo-image memory cache)
-  //   2. MediaLibrary.getAssetInfoAsync with shouldDownloadFromNetwork
-  //      (forces iOS to materialize iCloud-offloaded files)
-  // Without this, ph:// URIs for offloaded photos render as blank white
-  // thumbnails for several seconds while iOS lazy-downloads each one.
-  // Tracks per-asset so we never redo work.
-  const warmupGroupAssets = useCallback((groupsToWarm) => {
-    for (const group of groupsToWarm) {
+  // warmupGroupAssets — fire-and-forget Image.prefetch + getAssetInfoAsync
+  // (shouldDownloadFromNetwork:true) for the assets in the passed groups.
+  //
+  // CRITICAL: on first mount after the dup scan is already finished, we
+  // get ALL analyzed groups in one emit — could easily be 500+ groups × 3
+  // assets = 1500 PHAssetResource + iCloud download requests. Without
+  // capping + pacing this, iOS OOMs and the app hard-crashes.
+  //
+  // So: batch assets into chunks of 5 with a 100ms gap, and cap each
+  // warmup call to MAX_PER_CALL assets. Assets past the cap will be
+  // warmed up by onViewableItemsChanged as the user scrolls.
+  const warmupGroupAssets = useCallback(async (groupsToWarm) => {
+    const MAX_PER_CALL = 40;
+    const CHUNK = 5;
+    const CHUNK_DELAY = 100;
+
+    const toWarm = [];
+    outer: for (const group of groupsToWarm) {
       for (const asset of group.assets) {
         if (warmedUpIdsRef.current.has(asset.id)) continue;
         warmedUpIdsRef.current.add(asset.id);
+        toWarm.push(asset);
+        if (toWarm.length >= MAX_PER_CALL) break outer;
+      }
+    }
+
+    for (let i = 0; i < toWarm.length; i += CHUNK) {
+      for (const asset of toWarm.slice(i, i + CHUNK)) {
         try { Image.prefetch(asset.uri); } catch {}
         MediaLibrary.getAssetInfoAsync(asset.id, { shouldDownloadFromNetwork: true }).catch(() => {});
       }
+      if (i + CHUNK < toWarm.length) {
+        await new Promise((r) => setTimeout(r, CHUNK_DELAY));
+      }
     }
   }, []);
+
+  // FlatList requires viewabilityConfigCallbackPairs to be a stable ref.
+  // Warms up groups as they scroll into view.
+  const viewabilityPairsRef = useRef([
+    {
+      viewabilityConfig: { itemVisiblePercentThreshold: 1, minimumViewTime: 100 },
+      onViewableItemsChanged: ({ viewableItems }) => {
+        if (!viewableItems || viewableItems.length === 0) return;
+        const groups = viewableItems.map((v) => v.item).filter(Boolean);
+        if (groups.length > 0) warmupGroupAssetsRef.current(groups);
+      },
+    },
+  ]);
+  // ref-wrapper so the stable viewability callback always calls the latest
+  // warmupGroupAssets (without re-creating the FlatList prop).
+  const warmupGroupAssetsRef = useRef(warmupGroupAssets);
+  useEffect(() => { warmupGroupAssetsRef.current = warmupGroupAssets; }, [warmupGroupAssets]);
 
   // Subscribe to the duplicates store. SwipeScreen kicks off the scan at
   // startup, so by the time this tab is opened, results are usually already
@@ -450,13 +486,18 @@ export default function DuplicatesScreen() {
         data={groups}
         keyExtractor={(g) => g.id}
         contentContainerStyle={styles.listContent}
-        // Mount the first 25 groups up front (matches the AI_BATCH size, so
-        // everything the duplicates store emits in its first wave is ready).
-        // Scrolling past that grows in small increments.
-        initialNumToRender={25}
-        maxToRenderPerBatch={5}
-        windowSize={10}
+        // Mount the first 10 groups up front — enough to fill the screen on
+        // first paint, but low enough that we don't flood PHImageManager
+        // with ~30+ simultaneous thumbnail loads the moment the tab opens.
+        // Groups past that get warmed up via onViewableItemsChanged as the
+        // user scrolls (see viewabilityConfigCallbackPairs below).
+        initialNumToRender={10}
+        maxToRenderPerBatch={4}
+        windowSize={5}
         removeClippedSubviews
+        // Warm up groups as they scroll into view. warmupGroupAssets is
+        // idempotent per-asset-id, so re-firing is cheap.
+        viewabilityConfigCallbackPairs={viewabilityPairsRef.current}
         ListHeaderComponent={<View style={{ height: insets.top + 83 }} />}
         ListFooterComponent={progress.loaded < progress.total && progress.total > 0 ? (
           <View style={{ alignItems: 'center', paddingVertical: 20 }}>
