@@ -430,9 +430,12 @@ export default function DuplicatesScreen() {
     );
   }
 
-  // --- SCANNING ---
-  if (phase === 'scanning') {
-    const analyzing = progress.total > 0;
+  // --- SCANNING / ANALYZING (no groups yet) ---
+  // 'analyzing' with empty groups means the processor loop has started but
+  // the first batch hasn't come through AI yet. Show the loading spinner,
+  // NOT the "no duplicates found" empty state.
+  if (phase === 'scanning' || (phase === 'analyzing' && groups.length === 0)) {
+    const analyzing = phase === 'analyzing' || progress.total > 0;
     return (
       <View style={[styles.centerContainer, { backgroundColor: theme.bg }]}>
         <ActivityIndicator size="large" color="#5856D6" />
@@ -446,8 +449,11 @@ export default function DuplicatesScreen() {
     );
   }
 
-  // --- NO RESULTS ---
-  if (groups.length === 0) {
+  // --- NO RESULTS (only after scan is truly done) ---
+  // Previously this also rendered during the 'analyzing' gap before the
+  // first group came through, which made users think there were no
+  // duplicates when the scan was actually still running.
+  if (phase === 'done' && groups.length === 0) {
     return (
       <View style={[styles.centerContainer, { backgroundColor: theme.bg }]}>
         <Ionicons name="checkmark-circle" size={56} color={colors.green} style={{ marginBottom: 16 }} />
