@@ -25,7 +25,10 @@ import { loadDismissedGroups } from './storage';
 
 const TIME_WINDOW_MS = 5000;
 const MIN_SIZE_RATIO = 0.5;
-const AI_BATCH = 25;
+// Lowered 25 → 15 after OOM crashes on Duplicates tab: smaller batch =
+// lower memory ceiling per AI pass (analyzePhotos loads images + runs
+// Vision face detection per asset). First batch still feels fast enough.
+const AI_BATCH = 15;
 
 const initialState = {
   phase: 'idle',           // 'idle' | 'scanning' | 'analyzing' | 'done' | 'error'

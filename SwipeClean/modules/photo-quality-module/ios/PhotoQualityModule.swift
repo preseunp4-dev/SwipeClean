@@ -20,67 +20,72 @@ public class PhotoQualityModule: Module {
       var results = Array<[String: Any]>(repeating: [:], count: count)
       let lock = NSLock()
       let imageManager = PHImageManager.default()
-      let targetSize = CGSize(width: 600, height: 600) // Smaller = faster
+      // REDUCED from 600×600 to 300×300: 4× less memory per iteration.
+      // Sharpness samples a 200×200 center crop, so 300 still has margin.
+      // Vision face detection works fine at this resolution.
+      let targetSize = CGSize(width: 300, height: 300)
 
-      // Process all photos concurrently across CPU cores
+      // Process photos concurrently across CPU cores, but wrap each
+      // iteration in an autoreleasepool so per-photo CoreImage/Vision
+      // allocations are released immediately instead of piling up until
+      // the whole batch completes. That pile-up was what caused the
+      // hard crashes on Duplicates-tab open.
       DispatchQueue.concurrentPerform(iterations: count) { i in
-        let asset = assets[i]
-        var result: [String: Any] = [
-          "id": asset.localIdentifier,
-          "sharpness": 0.5, "exposure": 0.5,
-          "facesDetected": 0, "eyesOpen": false, "smiling": false,
-          "faceQuality": 0.0, "compositeScore": 50.0
-        ]
+        autoreleasepool {
+          let asset = assets[i]
+          var result: [String: Any] = [
+            "id": asset.localIdentifier,
+            "sharpness": 0.5, "exposure": 0.5,
+            "facesDetected": 0, "eyesOpen": false, "smiling": false,
+            "faceQuality": 0.0, "compositeScore": 50.0
+          ]
 
-        let options = PHImageRequestOptions()
-        options.isSynchronous = true
-        options.deliveryMode = .fastFormat
-        options.isNetworkAccessAllowed = false
-        options.resizeMode = .fast
+          let options = PHImageRequestOptions()
+          options.isSynchronous = true
+          options.deliveryMode = .fastFormat
+          options.isNetworkAccessAllowed = false
+          options.resizeMode = .fast
 
-        let semaphore = DispatchSemaphore(value: 0)
-        imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFit, options: options) { image, _ in
-          defer { semaphore.signal() }
-          guard let cgImage = image?.cgImage else { return }
+          let semaphore = DispatchSemaphore(value: 0)
+          imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFit, options: options) { image, _ in
+            defer { semaphore.signal() }
+            guard let cgImage = image?.cgImage else { return }
 
-          let sharpness = self.calculateSharpness(cgImage)
-          let exposure = self.calculateExposure(cgImage)
-          let faceResults = self.analyzeFaces(cgImage)
+            let sharpness = self.calculateSharpness(cgImage)
+            let exposure = self.calculateExposure(cgImage)
+            let faceResults = self.analyzeFaces(cgImage)
 
-          result["sharpness"] = sharpness
-          result["exposure"] = exposure
-          result["facesDetected"] = faceResults.faceCount
-          result["eyesOpen"] = faceResults.eyesOpen
-          result["smiling"] = faceResults.smiling
-          result["faceQuality"] = faceResults.quality
+            result["sharpness"] = sharpness
+            result["exposure"] = exposure
+            result["facesDetected"] = faceResults.faceCount
+            result["eyesOpen"] = faceResults.eyesOpen
+            result["smiling"] = faceResults.smiling
+            result["faceQuality"] = faceResults.quality
 
-          let resolution = Double(asset.pixelWidth * asset.pixelHeight)
-          let resolutionScore = min(resolution / 12_000_000.0, 1.0)
+            let resolution = Double(asset.pixelWidth * asset.pixelHeight)
+            let resolutionScore = min(resolution / 12_000_000.0, 1.0)
+            let exposureScore = 1.0 - abs(exposure - 0.5) * 2.0
 
-          let resources = PHAssetResource.assetResources(for: asset)
-          var fileSize: Int64 = 0
-          for resource in resources {
-            if let size = resource.value(forKey: "fileSize") as? Int64 { fileSize += size }
+            // Note: dropped the PHAssetResource fileSize lookup here — it
+            // was adding a per-photo PHAssetResource call (more memory
+            // pressure) for a small composite-score contribution.
+            var composite = sharpness * 30 + exposureScore * 15 + resolutionScore * 15
+            if faceResults.faceCount > 0 {
+              composite += faceResults.quality * 10
+              composite += faceResults.eyesOpen ? 12 : -5
+              composite += faceResults.smiling ? 13 : -3
+              if faceResults.obstructed { composite -= 15 }
+            } else {
+              composite += sharpness * 20 + exposureScore * 15
+            }
+            result["compositeScore"] = min(composite, 100.0)
           }
-          let fileSizeScore = min(Double(fileSize) / 10_000_000.0, 1.0)
-          let exposureScore = 1.0 - abs(exposure - 0.5) * 2.0
+          semaphore.wait()
 
-          var composite = sharpness * 30 + exposureScore * 15 + resolutionScore * 10 + fileSizeScore * 10
-          if faceResults.faceCount > 0 {
-            composite += faceResults.quality * 10
-            composite += faceResults.eyesOpen ? 12 : -5
-            composite += faceResults.smiling ? 13 : -3
-            if faceResults.obstructed { composite -= 15 } // Face partially covered (hand, object)
-          } else {
-            composite += sharpness * 20 + exposureScore * 15
-          }
-          result["compositeScore"] = min(composite, 100.0)
+          lock.lock()
+          results[i] = result
+          lock.unlock()
         }
-        semaphore.wait()
-
-        lock.lock()
-        results[i] = result
-        lock.unlock()
       }
 
       return results
