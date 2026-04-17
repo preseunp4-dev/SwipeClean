@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
+import * as MediaLibrary from 'expo-media-library';
 import ZoomableImage from '../components/ZoomableImage';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
@@ -277,6 +278,27 @@ export default function DuplicatesScreen() {
   const dismissedKeysRef = useRef(dismissedKeys);
   useEffect(() => { dismissedKeysRef.current = dismissedKeys; }, [dismissedKeys]);
 
+  // Assets we've already warmed up (iCloud download triggered + prefetched).
+  const warmedUpIdsRef = useRef(new Set());
+
+  // warmupGroupAssets — for each asset in the passed groups, fire-and-forget
+  //   1. Image.prefetch (warms expo-image memory cache)
+  //   2. MediaLibrary.getAssetInfoAsync with shouldDownloadFromNetwork
+  //      (forces iOS to materialize iCloud-offloaded files)
+  // Without this, ph:// URIs for offloaded photos render as blank white
+  // thumbnails for several seconds while iOS lazy-downloads each one.
+  // Tracks per-asset so we never redo work.
+  const warmupGroupAssets = useCallback((groupsToWarm) => {
+    for (const group of groupsToWarm) {
+      for (const asset of group.assets) {
+        if (warmedUpIdsRef.current.has(asset.id)) continue;
+        warmedUpIdsRef.current.add(asset.id);
+        try { Image.prefetch(asset.uri); } catch {}
+        MediaLibrary.getAssetInfoAsync(asset.id, { shouldDownloadFromNetwork: true }).catch(() => {});
+      }
+    }
+  }, []);
+
   // Subscribe to the duplicates store. SwipeScreen kicks off the scan at
   // startup, so by the time this tab is opened, results are usually already
   // streaming in. We also call startScan() here as a safety fallback —
@@ -288,16 +310,19 @@ export default function DuplicatesScreen() {
       setGroups((prev) => {
         const prevMap = new Map(prev.map((g) => [g.id, g]));
         const dismissed = dismissedKeysRef.current;
-        // Preserve any local modifications (trashIds, bestId) on existing
-        // groups; append newly analyzed groups from the store.
-        return s.groups
+        const next = s.groups
           .filter((g) => !dismissed.has(groupKey(g.assets)))
           .map((g) => prevMap.get(g.id) || g);
+        // Warm up any groups that weren't in our previous state. These
+        // are the newly-arrived AI-analyzed batches.
+        const fresh = next.filter((g) => !prevMap.has(g.id));
+        if (fresh.length > 0) warmupGroupAssets(fresh);
+        return next;
       });
     });
     duplicatesStore.startScan();
     return () => unsub();
-  }, []);
+  }, [warmupGroupAssets]);
 
   // Manual rescan — used by the refresh button in the header.
   const rescan = useCallback(() => {
@@ -425,6 +450,13 @@ export default function DuplicatesScreen() {
         data={groups}
         keyExtractor={(g) => g.id}
         contentContainerStyle={styles.listContent}
+        // Render only a handful of rows up front and grow on scroll — prevents
+        // 100+ group rows × 2-3 thumbnails each from hammering PHImageManager
+        // all at once on cold tab open.
+        initialNumToRender={5}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        removeClippedSubviews
         ListHeaderComponent={<View style={{ height: insets.top + 83 }} />}
         ListFooterComponent={progress.loaded < progress.total && progress.total > 0 ? (
           <View style={{ alignItems: 'center', paddingVertical: 20 }}>
