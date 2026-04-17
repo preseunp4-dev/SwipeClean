@@ -59,13 +59,32 @@ export async function getAssetsPage(mediaTypes = [1, 2], count = 25, oldestFirst
 
 /**
  * Find duplicate groups natively — burst detection + exact duplicates.
- * Uses LAZY evaluation: only computes pHash / fileSize for burst candidates,
- * not every asset. Safe on huge libraries (no OOM crash).
- * Returns array of { id, type, assets: [{ id, mediaType, width, height, creationTime, duration, fileSize, uri }] }.
+ *
+ * Streams groups via the "onDuplicateGroup" event as they're found
+ * (newest bursts first), AND returns the full array when the scan
+ * completes. Callers can subscribe via addDuplicateGroupListener to
+ * handle groups progressively, or just await the returned array.
+ *
+ * Uses LAZY evaluation: only computes pHash / fileSize for burst
+ * candidates (dimension + time-window matches), not every asset.
  */
 export async function findDuplicateGroups(mediaTypes = [1, 2], timeWindowMs = 5000, minSizeRatio = 0.5) {
   if (!nativeModule) return [];
   return nativeModule.findDuplicateGroups(mediaTypes, timeWindowMs, minSizeRatio);
+}
+
+/**
+ * Subscribe to duplicate groups as they're discovered during a scan.
+ * The callback receives { group: { id, type, assets: [...] } }.
+ * Returns a subscription handle — call .remove() to unsubscribe.
+ * Must be called BEFORE starting a scan (events fired before subscription
+ * are dropped).
+ */
+export function addDuplicateGroupListener(callback) {
+  if (!nativeModule || typeof nativeModule.addListener !== 'function') {
+    return { remove: () => {} };
+  }
+  return nativeModule.addListener('onDuplicateGroup', callback);
 }
 
 /**

@@ -15,6 +15,7 @@
 import * as MediaLibrary from 'expo-media-library';
 import {
   findDuplicateGroups as findDuplicateGroupsNative,
+  addDuplicateGroupListener,
   isAvailable as fileSizeModuleAvailable,
 } from '../../modules/file-size-module';
 import {
@@ -119,36 +120,63 @@ async function runScan() {
 
   setState({ phase: 'scanning', progress: { loaded: 0, total: 0 }, groups: [] });
 
-  const raw = await findDuplicateGroupsNative([1, 2], TIME_WINDOW_MS, MIN_SIZE_RATIO);
-  const withTrash = raw.map((g) => ({ ...g, trashIds: new Set() }));
-
   const dismissed = await loadDismissedGroups();
-  const visible = withTrash.filter((g) => !dismissed.has(groupKey(g.assets)));
 
-  if (visible.length === 0) {
-    setState({ phase: 'done', groups: [], progress: { loaded: 0, total: 0 } });
-    return;
-  }
+  // --- Streaming pipeline ---
+  // Native emits an "onDuplicateGroup" event for each cluster as it's found
+  // (newest-first). We buffer them here. A processor loop pulls AI_BATCH at
+  // a time, runs analyzeBatch, appends to the store's groups, and emits.
+  //
+  // The whole scan becomes: first 15-group AI batch visible in ~5-10s on
+  // an 80K library, more appear every few seconds, done when native scan
+  // returns AND buffer is fully drained.
+  const buffer = [];
+  const analyzed = [];
+  let scanComplete = false;
 
-  setState({
-    phase: 'analyzing',
-    groups: [],
-    progress: { loaded: 0, total: visible.length },
+  const sub = addDuplicateGroupListener((event) => {
+    const raw = event?.group;
+    if (!raw || !raw.assets) return;
+    const group = { ...raw, trashIds: new Set() };
+    if (dismissed.has(groupKey(group.assets))) return;
+    buffer.push(group);
   });
 
-  const analyzed = [];
-  for (let i = 0; i < visible.length; i += AI_BATCH) {
-    const batch = visible.slice(i, i + AI_BATCH);
-    await analyzeBatch(batch);
-    for (const g of batch) analyzed.push(g);
-    setState({
-      groups: [...analyzed],
-      progress: { loaded: analyzed.length, total: visible.length },
-    });
-    // Yield to JS thread so UI can render the append
-    await new Promise((r) => setTimeout(r, 50));
+  // Processor loop: pulls batches from the buffer and AI-analyzes them.
+  // Runs concurrently with the native scan. Exits only when scan is done
+  // AND buffer is empty.
+  const processorPromise = (async () => {
+    setState({ phase: 'analyzing', groups: [], progress: { loaded: 0, total: 0 } });
+    while (!scanComplete || buffer.length > 0) {
+      // Pull a full batch if we have one, OR flush a partial batch if
+      // the scan has finished (no more coming).
+      const haveFull = buffer.length >= AI_BATCH;
+      const haveTail = scanComplete && buffer.length > 0;
+      if (haveFull || haveTail) {
+        const batch = buffer.splice(0, Math.min(AI_BATCH, buffer.length));
+        await analyzeBatch(batch);
+        for (const g of batch) analyzed.push(g);
+        setState({
+          groups: [...analyzed],
+          progress: { loaded: analyzed.length, total: analyzed.length + buffer.length },
+        });
+        // Small yield so UI gets to paint before the next AI batch
+        await new Promise((r) => setTimeout(r, 50));
+      } else {
+        // Nothing to process right now — wait briefly for more events
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+  })();
+
+  try {
+    await findDuplicateGroupsNative([1, 2], TIME_WINDOW_MS, MIN_SIZE_RATIO);
+  } finally {
+    scanComplete = true;
+    sub.remove();
   }
 
+  await processorPromise;
   setState({ phase: 'done' });
 }
 

@@ -7,6 +7,11 @@ public class FileSizeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("FileSizeModule")
 
+    // Events emitted during findDuplicateGroups scan so JS can stream
+    // results as they're found instead of blocking for the whole scan.
+    // Payload shape: { group: { id, type, assets: [...] } }
+    Events("onDuplicateGroup")
+
     // --- Existing: get file sizes for specific IDs ---
     AsyncFunction("getFileSizes") { (localIdentifiers: [String]) -> [[String: Any]] in
       let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: localIdentifiers, options: nil)
@@ -176,35 +181,40 @@ public class FileSizeModule: Module {
       return Array(combined.prefix(perTypeLimit))
     }
 
-    // --- NEW #3: Find duplicate groups natively (LAZY EVALUATION) ---
-    // Rewritten from the eager version that computed pHash + fileSize for
-    // EVERY asset upfront. On 80K+ libraries that caused OOM crashes because
-    // it queued 80K PHImageManager.requestImage + 80K PHAssetResource calls,
-    // each holding memory until the whole pass finished.
+    // --- NEW #3: Find duplicate groups natively (STREAMING + LAZY) ---
+    // Emits "onDuplicateGroup" events as each cluster is discovered instead
+    // of blocking until the whole library is scanned. Iterates newest-first
+    // so the first emitted groups are the user's most recent bursts — the
+    // ones they care about most.
     //
-    // New strategy: only compute fileSize / pHash LAZILY for assets that are
-    // burst candidates (dimension-match within the time window). On a typical
-    // library <1% of assets are candidates, so lazy evaluation cuts memory
-    // and wall-clock time by ~100x.
+    // Key properties:
+    //   - Lazy pHash / fileSize: only computed for burst candidates
+    //     (dimension-match inside the time window), not every asset.
+    //   - PHAsset refs retained from phase 1: no re-fetch-by-id per asset.
+    //   - Returns the full groups array at the end for callers that want
+    //     to await rather than stream; streaming callers can ignore it.
     AsyncFunction("findDuplicateGroups") { (mediaTypes: [Int], timeWindowMs: Int, minSizeRatio: Double) -> [[String: Any]] in
-      // Lightweight metadata: no fileSize, no pHash — just what we need to
-      // find candidates. Cheap to allocate for the whole library.
+      // Lightweight metadata + a parallel PHAsset ref so getFileSize /
+      // getPHash don't have to re-run fetchAssets(withLocalIdentifiers:)
+      // every time.
       struct LightAsset {
         let id: String; let time: Double; let width: Int; let height: Int
         let mediaType: String; let duration: Double; let uri: String
       }
 
-      // Phase 1: fetch all metadata. No PHAssetResource, no image loading.
-      // ~100-500ms even on 80K libraries.
+      // Phase 1: fetch metadata. Sort NEWEST-FIRST so recent groups stream
+      // out first — that's what the user wants to see.
       var assets: [LightAsset] = []
+      var phassetById: [String: PHAsset] = [:]
       for mediaType in mediaTypes {
         let type: PHAssetMediaType = mediaType == 1 ? .image : .video
         let options = PHFetchOptions()
-        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let fetchResult = PHAsset.fetchAssets(with: type, options: options)
         let typeStr = mediaType == 1 ? "photo" : "video"
         for i in 0..<fetchResult.count {
           let asset = fetchResult.object(at: i)
+          phassetById[asset.localIdentifier] = asset
           assets.append(LightAsset(
             id: asset.localIdentifier,
             time: (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000,
@@ -216,18 +226,19 @@ public class FileSizeModule: Module {
           ))
         }
       }
-      assets.sort { $0.time < $1.time }
+      // Keep newest-first order (descending time)
+      assets.sort { $0.time > $1.time }
 
-      // Lazy caches — populated only for candidates
+      // Lazy caches — populated only for candidates.
       var sizeCache: [String: Int64] = [:]
       var pHashCache: [String: UInt64] = [:]
       let imageManager = PHImageManager.default()
 
       // Look up one asset's fileSize via PHAssetResource. Memoized.
+      // Uses the PHAsset ref from phase 1 (no re-fetch).
       func getFileSize(_ id: String) -> Int64 {
         if let s = sizeCache[id] { return s }
-        let fr = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil)
-        guard let a = fr.firstObject else { sizeCache[id] = 0; return 0 }
+        guard let a = phassetById[id] else { sizeCache[id] = 0; return 0 }
         let resources = PHAssetResource.assetResources(for: a)
         var total: Int64 = 0
         for r in resources {
@@ -237,11 +248,11 @@ public class FileSizeModule: Module {
         return total
       }
 
-      // Compute one asset's 8x8 perceptual hash. Memoized.
+      // Compute one asset's 8x8 perceptual hash. Memoized. PHAsset ref
+      // reused from phase 1.
       func getPHash(_ id: String) -> UInt64 {
         if let h = pHashCache[id] { return h }
-        let fr = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil)
-        guard let a = fr.firstObject else { pHashCache[id] = 0; return 0 }
+        guard let a = phassetById[id] else { pHashCache[id] = 0; return 0 }
 
         let options = PHImageRequestOptions()
         options.isSynchronous = true
@@ -279,10 +290,19 @@ public class FileSizeModule: Module {
       var groups: [[String: Any]] = []
       var groupId = 0
 
-      // Phase 2: burst detection with sliding window. Lazy pHash + fileSize.
+      // Phase 2: burst detection with sliding window. Because `assets` is
+      // sorted DESCENDING (newest first), neighbors with near-identical
+      // times have smaller INDEX than the current asset, so the sliding
+      // window advances forward-in-index = backward-in-time.
+      // For each i, any candidate j must have time within +/- timeWindow
+      // of assets[i].time — all such j's are contiguous in the array
+      // because the array is time-sorted.
       var windowStart = 0
       for i in 0..<assets.count {
-        while windowStart < i && assets[i].time - assets[windowStart].time > timeWindow {
+        // Advance windowStart until assets[windowStart] is within
+        // timeWindow of assets[i]. In descending order, time is decreasing
+        // as index increases, so windowStart walks forward.
+        while windowStart < i && assets[windowStart].time - assets[i].time > timeWindow {
           windowStart += 1
         }
         if used.contains(assets[i].id) { continue }
@@ -291,17 +311,19 @@ public class FileSizeModule: Module {
 
         for j in windowStart..<assets.count {
           if j == i { continue }
-          if assets[j].time - assets[i].time > timeWindow { break }
+          // In descending order, once assets[j].time is more than timeWindow
+          // BEFORE assets[i].time, we've exited the window.
+          if assets[i].time - assets[j].time > timeWindow { break }
           if used.contains(assets[j].id) { continue }
           if assets[j].width == assets[i].width && assets[j].height == assets[i].height {
-            // Dimension match — now check fileSize ratio (lazy)
+            // Dimension match — check fileSize ratio (lazy)
             let sizeA = getFileSize(assets[i].id)
             let sizeB = getFileSize(assets[j].id)
             if sizeA > 0 && sizeB > 0 {
               let ratio = Double(min(sizeA, sizeB)) / Double(max(sizeA, sizeB))
               if ratio < minSizeRatio { continue }
             }
-            // Size-close — now verify with pHash (lazy)
+            // Size-close — verify with pHash (lazy)
             let hashA = getPHash(assets[i].id)
             let hashB = getPHash(assets[j].id)
             if hashA != 0 && hashB != 0 {
@@ -327,20 +349,21 @@ public class FileSizeModule: Module {
               "uri": a.uri
             ]
           }
-          groups.append([
+          let groupDict: [String: Any] = [
             "id": "group-\(groupId)",
             "type": "burst",
             "assets": clusterOut
-          ])
+          ]
+          groups.append(groupDict)
+          // STREAM: emit this group to JS immediately so it can start AI
+          // analysis and rendering without waiting for the rest of the scan.
+          self.sendEvent("onDuplicateGroup", ["group": groupDict])
           groupId += 1
         }
       }
 
       // Phase 3: exact duplicates — but ONLY using already-cached fileSizes
-      // from burst detection. We skip the eager O(N) PHAssetResource scan
-      // that used to happen here — that's what caused crashes on huge libs.
-      // Trade-off: we catch fewer "same-file-twice" duplicates outside burst
-      // windows, but we never crash. Burst covers the most common case.
+      // from burst detection. No eager O(N) PHAssetResource scan here.
       let remaining = assets.filter { !used.contains($0.id) && sizeCache[$0.id] != nil && (sizeCache[$0.id] ?? 0) > 0 }
       var sizeMap: [String: [Int]] = [:]
       for (idx, asset) in remaining.enumerated() {
@@ -363,11 +386,13 @@ public class FileSizeModule: Module {
             "uri": a.uri
           ]
         }
-        groups.append([
+        let groupDict: [String: Any] = [
           "id": "group-\(groupId)",
           "type": "exact",
           "assets": out
-        ])
+        ]
+        groups.append(groupDict)
+        self.sendEvent("onDuplicateGroup", ["group": groupDict])
         groupId += 1
       }
 
