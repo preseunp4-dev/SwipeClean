@@ -61,30 +61,42 @@ function groupKey(assets) {
   return assets.map((a) => a.id).sort().join('|');
 }
 
-async function analyzeGroup(group) {
-  if (!photoQualityAvailable) return group;
+// Analyze ALL photos in a batch of groups with a single native call.
+// Much faster than one call per group:
+//   - Only one JS↔native bridge crossing per batch (vs. 25)
+//   - The native photo-quality module uses DispatchQueue.concurrentPerform,
+//     so giving it 75 photos at once lets it parallelize across cores
+// After the batch resolves, distribute each photo's compositeScore back
+// to its group and pick the best one.
+async function analyzeBatch(batch) {
+  if (!photoQualityAvailable || batch.length === 0) return;
+  const allIds = [];
+  for (const g of batch) for (const a of g.assets) allIds.push(a.id);
+  if (allIds.length === 0) return;
   try {
-    const ids = group.assets.map((a) => a.id);
-    const scores = await analyzePhotos(ids);
+    const scores = await analyzePhotos(allIds);
     const scoreMap = {};
     for (const s of scores) scoreMap[s.id] = s.compositeScore;
-    let bestId = group.assets[0].id;
-    let bestScore = -1;
-    for (const asset of group.assets) {
-      const score = scoreMap[asset.id] || 0;
-      if (score > bestScore) {
-        bestScore = score;
-        bestId = asset.id;
+    for (const group of batch) {
+      let bestId = group.assets[0].id;
+      let bestScore = -1;
+      for (const asset of group.assets) {
+        const score = scoreMap[asset.id] || 0;
+        if (score > bestScore) {
+          bestScore = score;
+          bestId = asset.id;
+        }
       }
+      group.assets = [
+        ...group.assets.filter((a) => a.id === bestId),
+        ...group.assets.filter((a) => a.id !== bestId),
+      ];
+      group.bestId = bestId;
+      group.trashIds = new Set(group.assets.filter((a) => a.id !== bestId).map((a) => a.id));
     }
-    group.assets = [
-      ...group.assets.filter((a) => a.id === bestId),
-      ...group.assets.filter((a) => a.id !== bestId),
-    ];
-    group.bestId = bestId;
-    group.trashIds = new Set(group.assets.filter((a) => a.id !== bestId).map((a) => a.id));
-  } catch {}
-  return group;
+  } catch (e) {
+    console.warn('[duplicatesStore] analyzeBatch failed:', e?.message);
+  }
 }
 
 let scanPromise = null;
@@ -123,10 +135,8 @@ async function runScan() {
   const analyzed = [];
   for (let i = 0; i < visible.length; i += AI_BATCH) {
     const batch = visible.slice(i, i + AI_BATCH);
-    for (const g of batch) {
-      await analyzeGroup(g);
-      analyzed.push(g);
-    }
+    await analyzeBatch(batch);
+    for (const g of batch) analyzed.push(g);
     setState({
       groups: [...analyzed],
       progress: { loaded: analyzed.length, total: visible.length },
