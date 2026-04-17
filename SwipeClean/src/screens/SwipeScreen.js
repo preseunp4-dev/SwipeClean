@@ -331,8 +331,23 @@ export default function SwipeScreen() {
         cursor = oldestFirst ? Math.max(...times) : Math.min(...times);
       }
 
-      const raw = await getAssetsPage(mediaTypes, TOPUP_SIZE, oldestFirst, cursor);
-      let unseen = raw.filter((a) => !seen.has(a.id) && !existingIds.has(a.id));
+      // Recursive pagination — handles the case where the page we fetch
+      // contains items the user saw via a different filter before.
+      let unseen = [];
+      const MAX_PAGES = 20;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const raw = await getAssetsPage(mediaTypes, TOPUP_SIZE, oldestFirst, cursor);
+        if (!raw || raw.length === 0) break;
+        for (const a of raw) {
+          if (!seen.has(a.id) && !existingIds.has(a.id)) unseen.push(a);
+          if (unseen.length >= TOPUP_SIZE) break;
+        }
+        if (unseen.length >= TOPUP_SIZE) break;
+        const lastTime = raw[raw.length - 1].creationTime || 0;
+        if (lastTime === 0 || lastTime === cursor) break; // defensive: stuck
+        cursor = lastTime;
+      }
+
       if (filter === 'all') {
         for (let i = unseen.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -387,16 +402,34 @@ export default function SwipeScreen() {
       } else {
         // Native-bridge fast path. Falls back to MediaLibrary only in Expo Go
         // where our native module isn't loaded.
-        let assets = [];
+        let unseen = [];
         if (fileSizeModuleAvailable) {
           const mediaTypes =
             filter === 'photos' ? [1] :
             filter === 'videos' ? [2] :
             [1, 2]; // oldest, newest, all
           const oldestFirst = filter !== 'newest';
-          // Over-fetch: getAssetsPage returns up to count*4. JS slices unseen.
-          const raw = await getAssetsPage(mediaTypes, INITIAL_BATCH, oldestFirst, 0);
-          assets = raw;
+
+          // Recursive pagination: if a heavy returning user has already swiped
+          // most of the oldest N photos, the first page may return all-seen.
+          // Keep paging via creationTime cursor until we have INITIAL_BATCH
+          // unseen items or the library is exhausted.
+          const seen = seenIdsRef.current;
+          let cursor = 0;
+          const MAX_PAGES = 20; // safety cap: up to 20 * 100 = 2000 items scanned
+          for (let page = 0; page < MAX_PAGES; page++) {
+            const raw = await getAssetsPage(mediaTypes, INITIAL_BATCH, oldestFirst, cursor);
+            if (!raw || raw.length === 0) break;
+            for (const a of raw) {
+              if (!seen.has(a.id)) unseen.push(a);
+              if (unseen.length >= INITIAL_BATCH) break;
+            }
+            if (unseen.length >= INITIAL_BATCH) break;
+            // Advance cursor past the LAST item of this page so the next
+            // page starts strictly after (oldestFirst) or before (newest).
+            cursor = raw[raw.length - 1].creationTime || 0;
+            if (cursor === 0) break; // defensive: can't advance, stop
+          }
         } else {
           // Expo Go fallback — the slow expo-media-library path
           const opts = { first: 100 };
@@ -414,11 +447,10 @@ export default function SwipeScreen() {
             opts.mediaType = [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video];
           }
           const r = await MediaLibrary.getAssetsAsync(opts);
-          assets = r.assets;
+          const seen = seenIdsRef.current;
+          unseen = r.assets.filter((a) => !seen.has(a.id));
         }
 
-        const seen = seenIdsRef.current;
-        let unseen = assets.filter((a) => !seen.has(a.id));
         if (filter === 'all') {
           // Fisher-Yates shuffle for random
           for (let i = unseen.length - 1; i > 0; i--) {
@@ -617,22 +649,21 @@ export default function SwipeScreen() {
     initialLoad();
   }, []);
 
-  // Hide the custom splash overlay the moment the first batch is ready.
-  // Also: as soon as the splash hides, start the two background tasks
-  // that used to run at app launch:
-  //   a) duplicatesStore.startScan() — deferred 3s to let the UI settle,
-  //      so the scan doesn't compete with image prefetching / card rendering
-  //   b) buildNativeCache() — triggered by the dup-scan-done subscription
-  //      below, NOT here, so we serialize the two heavy native operations
+  // Hide the custom splash overlay the moment initialLoad resolves.
+  // We use `!loading` (not `assets.length > 0`) so the splash also hides for:
+  //   - empty libraries (user has 0 photos)
+  //   - permission denied (shows the permission-denied UI underneath)
+  // If assets DID load, also defer-trigger the duplicate scan 3s later so
+  // the first photo paints + images prefetch before heavy native work.
   const splashHiddenRef = useRef(false);
   useEffect(() => {
     if (splashHiddenRef.current) return;
-    if (assets.length > 0 && !loading) {
+    if (!loading) {
       splashHiddenRef.current = true;
       if (splashRef.current) splashRef.current();
-      // Defer dup scan so the first photo paints, images prefetch, and the
-      // user has a moment with the UI before we kick off the heavy native work.
-      setTimeout(() => { duplicatesStore.startScan(); }, 3000);
+      if (assets.length > 0) {
+        setTimeout(() => { duplicatesStore.startScan(); }, 3000);
+      }
     }
   }, [assets.length, loading]);
 

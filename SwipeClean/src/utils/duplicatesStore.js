@@ -1,13 +1,14 @@
 // Singleton store for the duplicate scan + AI pipeline.
 //
-// Kicked off by SwipeScreen on startup so results are already streaming in
-// by the time the user taps the Duplicates tab. DuplicatesScreen subscribes
-// to this store and renders whatever groups are currently analyzed.
+// Kicked off by SwipeScreen 3s after the first photo shows, so the UI
+// has a moment to paint before the heavy native scan starts.
+// DuplicatesScreen subscribes to this store and renders whatever groups
+// are currently analyzed.
 //
 // Pipeline:
 //   1. findDuplicateGroupsNative(...)  — one native call, scans whole library
 //   2. Filter out dismissed groups
-//   3. AI analyze in batches of AI_BATCH (50) — groups only appear after the
+//   3. AI analyze in batches of AI_BATCH (25) — groups only appear after the
 //      AI pass has run on them, per product requirement
 //   4. After each batch, emit updated groups list
 

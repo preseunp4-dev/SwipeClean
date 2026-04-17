@@ -322,7 +322,7 @@ public class FileSizeModule: Module {
               "mediaType": a.mediaType,
               "width": a.width,
               "height": a.height,
-              "creationTime": a.time / 1000, // back to seconds
+              "creationTime": a.time, // milliseconds, consistent with other functions
               "duration": a.duration,
               "fileSize": a.size,
               "uri": a.uri
@@ -363,7 +363,7 @@ public class FileSizeModule: Module {
             "mediaType": a.mediaType,
             "width": a.width,
             "height": a.height,
-            "creationTime": a.time / 1000,
+            "creationTime": a.time, // milliseconds, consistent
             "duration": a.duration,
             "fileSize": a.size,
             "uri": a.uri

@@ -52,7 +52,8 @@ export async function getAllAssetsNative(mediaTypes = [1, 2]) {
  *          (no fileSize — use getFileSizes for specific IDs).
  */
 export async function getAssetsPage(mediaTypes = [1, 2], count = 25, oldestFirst = true, afterCreationTime = 0) {
-  if (!nativeModule) return [];
+  // Defensive: older native binaries may not have this function
+  if (!nativeModule || typeof nativeModule.getAssetsPage !== 'function') return [];
   return nativeModule.getAssetsPage(mediaTypes, count, oldestFirst, afterCreationTime);
 }
 
