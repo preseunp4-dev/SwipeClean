@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import { PanGestureHandler, State, NativeViewGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
-import * as MediaLibrary from 'expo-media-library';
 import ZoomableImage from '../components/ZoomableImage';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
@@ -281,39 +280,22 @@ export default function DuplicatesScreen() {
   // Assets we've already warmed up (iCloud download triggered + prefetched).
   const warmedUpIdsRef = useRef(new Set());
 
-  // warmupGroupAssets — fire-and-forget Image.prefetch + getAssetInfoAsync
-  // (shouldDownloadFromNetwork:true) for the assets in the passed groups.
+  // warmupGroupAssets — fire Image.prefetch for the assets in the passed
+  // groups. Called ONLY from onViewableItemsChanged, so memory is bounded
+  // by what's on screen (usually 5-15 assets at a time).
   //
-  // CRITICAL: on first mount after the dup scan is already finished, we
-  // get ALL analyzed groups in one emit — could easily be 500+ groups × 3
-  // assets = 1500 PHAssetResource + iCloud download requests. Without
-  // capping + pacing this, iOS OOMs and the app hard-crashes.
-  //
-  // So: batch assets into chunks of 5 with a 100ms gap, and cap each
-  // warmup call to MAX_PER_CALL assets. Assets past the cap will be
-  // warmed up by onViewableItemsChanged as the user scrolls.
-  const warmupGroupAssets = useCallback(async (groupsToWarm) => {
-    const MAX_PER_CALL = 40;
-    const CHUNK = 5;
-    const CHUNK_DELAY = 100;
-
-    const toWarm = [];
-    outer: for (const group of groupsToWarm) {
+  // We dropped the getAssetInfoAsync({shouldDownloadFromNetwork:true}) call
+  // that was here previously — it was triggering iCloud downloads of the
+  // FULL file per thumbnail, and across many batch emissions accumulated
+  // hundreds of in-flight downloads → OOM crash. iOS will serve the
+  // thumbnail from its local thumbnail cache regardless (no full download
+  // needed just to display a 130px thumbnail).
+  const warmupGroupAssets = useCallback((groupsToWarm) => {
+    for (const group of groupsToWarm) {
       for (const asset of group.assets) {
         if (warmedUpIdsRef.current.has(asset.id)) continue;
         warmedUpIdsRef.current.add(asset.id);
-        toWarm.push(asset);
-        if (toWarm.length >= MAX_PER_CALL) break outer;
-      }
-    }
-
-    for (let i = 0; i < toWarm.length; i += CHUNK) {
-      for (const asset of toWarm.slice(i, i + CHUNK)) {
         try { Image.prefetch(asset.uri); } catch {}
-        MediaLibrary.getAssetInfoAsync(asset.id, { shouldDownloadFromNetwork: true }).catch(() => {});
-      }
-      if (i + CHUNK < toWarm.length) {
-        await new Promise((r) => setTimeout(r, CHUNK_DELAY));
       }
     }
   }, []);
@@ -339,6 +321,13 @@ export default function DuplicatesScreen() {
   // startup, so by the time this tab is opened, results are usually already
   // streaming in. We also call startScan() here as a safety fallback —
   // it's a no-op if the scan is already running.
+  //
+  // NOTE: we do NOT warm up groups here. Doing that on every batch emit
+  // caused crashes — each batch queued dozens of iCloud downloads
+  // (getAssetInfoAsync shouldDownloadFromNetwork:true), and by the time
+  // 5-10 batches had streamed in, hundreds were in flight → OOM.
+  // Warmup now happens ONLY for groups that scroll into view, via
+  // onViewableItemsChanged below. Memory stays bounded by viewport.
   useEffect(() => {
     const unsub = duplicatesStore.subscribe((s) => {
       setPhase(s.phase);
@@ -346,19 +335,14 @@ export default function DuplicatesScreen() {
       setGroups((prev) => {
         const prevMap = new Map(prev.map((g) => [g.id, g]));
         const dismissed = dismissedKeysRef.current;
-        const next = s.groups
+        return s.groups
           .filter((g) => !dismissed.has(groupKey(g.assets)))
           .map((g) => prevMap.get(g.id) || g);
-        // Warm up any groups that weren't in our previous state. These
-        // are the newly-arrived AI-analyzed batches.
-        const fresh = next.filter((g) => !prevMap.has(g.id));
-        if (fresh.length > 0) warmupGroupAssets(fresh);
-        return next;
       });
     });
     duplicatesStore.startScan();
     return () => unsub();
-  }, [warmupGroupAssets]);
+  }, []);
 
   // Manual rescan — used by the refresh button in the header.
   const rescan = useCallback(() => {
