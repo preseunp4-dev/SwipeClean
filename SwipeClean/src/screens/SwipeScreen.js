@@ -136,24 +136,33 @@ export default function SwipeScreen() {
   const topUpInFlightRef = useRef({});
 
   // -----------------------------------------------------------------------
-  // warmupCards — for the first N cards of any newly-dispatched batch:
+  // warmupCards — warm up an entire batch so every card is ready to paint:
   //   1. Image.prefetch — warms expo-image's memory cache
-  //   2. MediaLibrary.getAssetInfoAsync — forces iOS to download the file
-  //      from iCloud if it's offloaded. This is the fix for the "white
-  //      photo" bug: for photos that live in iCloud, the URI alone is not
-  //      enough — iOS needs an explicit info request to materialize the file.
-  // Fire-and-forget; never blocks.
+  //   2. MediaLibrary.getAssetInfoAsync(..., shouldDownloadFromNetwork:true)
+  //      forces iOS to materialize any iCloud-offloaded file. Without this
+  //      step, ph:// URIs for offloaded photos render as blank white cards
+  //      for several seconds while iOS lazy-downloads them.
+  //
+  // Processes in chunks of 5 with a 100ms gap between chunks so multiple
+  // filters warming up simultaneously don't flood PHImageManager. The whole
+  // 25-card batch is covered in ~500ms of pacing.
+  // Fire-and-forget; callers never await.
   // -----------------------------------------------------------------------
-  const warmupCards = useCallback((batch, n = 5) => {
-    for (const a of (batch || []).slice(0, n)) {
-      try { Image.prefetch(a.uri); } catch {}
-      MediaLibrary.getAssetInfoAsync(a.id, { shouldDownloadFromNetwork: true })
-        .then((info) => {
-          if (info?.fileSize > 0) {
-            dispatch({ type: 'SET_FILE_SIZE', payload: { assetId: a.id, fileSize: info.fileSize } });
-          }
-        })
-        .catch(() => {});
+  const warmupCards = useCallback(async (batch) => {
+    if (!batch || batch.length === 0) return;
+    const CHUNK = 5;
+    for (let i = 0; i < batch.length; i += CHUNK) {
+      for (const a of batch.slice(i, i + CHUNK)) {
+        try { Image.prefetch(a.uri); } catch {}
+        MediaLibrary.getAssetInfoAsync(a.id, { shouldDownloadFromNetwork: true })
+          .then((info) => {
+            if (info?.fileSize > 0) {
+              dispatch({ type: 'SET_FILE_SIZE', payload: { assetId: a.id, fileSize: info.fileSize } });
+            }
+          })
+          .catch(() => {});
+      }
+      if (i + CHUNK < batch.length) await new Promise((r) => setTimeout(r, 100));
     }
   }, [dispatch]);
 
@@ -263,8 +272,7 @@ export default function SwipeScreen() {
         if (activeFilterRef.current === 'screenshots') {
           dispatch({ type: 'APPEND_ASSETS', payload: fresh });
         }
-        // Warm first few so they're ready by the time the user reaches them
-        warmupCards(fresh, 3);
+        warmupCards(fresh);
         return;
       }
 
@@ -285,7 +293,7 @@ export default function SwipeScreen() {
       if (activeFilterRef.current === filter) {
         dispatch({ type: 'APPEND_ASSETS', payload: newBatch });
       }
-      warmupCards(newBatch, 3);
+      warmupCards(newBatch);
     } catch (e) {
       console.warn(`topUpCategory(${filter}) failed:`, e?.message);
     } finally {
@@ -327,12 +335,8 @@ export default function SwipeScreen() {
 
       if (activeFilterRef.current === filter) {
         dispatch({ type: 'SET_ASSETS', payload: batch });
-        warmupCards(batch, 5);
-      } else {
-        // Warm up fewer cards for non-active filters — just enough so the
-        // first image is ready if the user taps into this filter.
-        warmupCards(batch, 3);
       }
+      warmupCards(batch);
       return batch;
     } catch (e) {
       console.warn(`loadCategoryDirect(${filter}) failed:`, e?.message);
@@ -358,12 +362,8 @@ export default function SwipeScreen() {
       filterCacheRef.current[f] = { assets: batch, currentIndex: 0 };
       if (activeFilterRef.current === f) {
         dispatch({ type: 'SET_ASSETS', payload: batch });
-        warmupCards(batch, 5);
-      } else {
-        // Warm up first 3 of each non-active filter so the first card is
-        // ready the moment the user taps in.
-        warmupCards(batch, 3);
       }
+      warmupCards(batch);
     }
   }, [dispatch, warmupCards]);
 
