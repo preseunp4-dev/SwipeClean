@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 
@@ -21,6 +21,15 @@ try {
   // Expo Go — reanimated not available
 }
 
+// IMPORTANT: create the animated-image wrapper ONCE at module load, not
+// inside the component body. If this runs on every render, React sees a
+// "different" component type each time and unmounts/remounts the image —
+// which cancels the in-flight load and shows black until it reloads.
+// That was the root cause of the Duplicates-tab flicker on swipe.
+const AnimatedImage = reanimatedAvailable && Animated
+  ? Animated.createAnimatedComponent(Image)
+  : null;
+
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // Simple fallback for Expo Go (no zoom, just shows the image)
@@ -34,7 +43,11 @@ function SimpleImage({ uri, width, height }) {
 
 // Full zoomable version for production builds
 function ZoomableImageFull({ uri, width, height, onZoomChange }) {
-  const AnimatedImage = Animated.createAnimatedComponent(Image);
+  // Memoize the source object so expo-image sees a stable reference across
+  // parent re-renders (Duplicates screen re-renders a lot during streaming).
+  // Without this, each render creates a new {uri} object literal which
+  // expo-image treats as a new source and reloads.
+  const source = useMemo(() => ({ uri }), [uri]);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -128,7 +141,7 @@ function ZoomableImageFull({ uri, width, height, onZoomChange }) {
   return (
     <View style={[styles.container, { width, height }]}>
       <GestureDetector gesture={composed}>
-        <AnimatedImage source={{ uri }} style={[{ width, height }, animatedStyle]} contentFit="cover" />
+        <AnimatedImage source={source} style={[{ width, height }, animatedStyle]} contentFit="cover" />
       </GestureDetector>
     </View>
   );
