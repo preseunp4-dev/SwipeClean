@@ -422,12 +422,15 @@ export default function SwipeScreen() {
       }
       if (!persistLoadedRef.current) await persistPromiseRef.current;
 
-      // Heavy background work — fire and forget
-      kickoffBackgroundPipeline();
+      // Load the ACTIVE filter first (oldest). Serial, so it's not contending
+      // with 3 other native-bridge calls — this is what hides the splash.
+      // Everything else happens after.
+      await loadCategoryDirect('oldest');
 
-      // Phase 1: parallel direct-MediaLibrary loads for the 4 fast categories
-      await Promise.all([
-        loadCategoryDirect('oldest'),
+      // Now fire the heavy background work + the other 3 Phase-1 categories
+      // in parallel. The user is already swiping 'oldest' by this point.
+      kickoffBackgroundPipeline();
+      Promise.all([
         loadCategoryDirect('newest'),
         loadCategoryDirect('photos'),
         loadCategoryDirect('screenshots'),

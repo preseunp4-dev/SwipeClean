@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet, View, Image, Platform } from 'react-native';
+import { StyleSheet, View, Platform } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -135,14 +135,11 @@ export default function App() {
           </View>
         )}
         {splashVisible && (
-          <View style={styles.splash} pointerEvents="auto">
-            <Image
-              source={require('./assets/splash-icon.png')}
-              style={styles.splashIcon}
-              resizeMode="contain"
-              fadeDuration={0}
-            />
-          </View>
+          // Solid black overlay during the transition from native splash
+          // → first photo. No icon: the native launch image already showed
+          // the branding, and drawing the icon again at a different size
+          // creates a jarring double-rectangle flash.
+          <View style={styles.splash} pointerEvents="auto" />
         )}
       </AppProvider>
       </PurchaseProvider>
@@ -161,11 +158,5 @@ const styles = StyleSheet.create({
   splash: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  splashIcon: {
-    width: '50%',
-    height: '50%',
   },
 });
