@@ -450,12 +450,12 @@ export default function DuplicatesScreen() {
         data={groups}
         keyExtractor={(g) => g.id}
         contentContainerStyle={styles.listContent}
-        // Render only a handful of rows up front and grow on scroll — prevents
-        // 100+ group rows × 2-3 thumbnails each from hammering PHImageManager
-        // all at once on cold tab open.
-        initialNumToRender={5}
-        maxToRenderPerBatch={3}
-        windowSize={5}
+        // Mount the first 25 groups up front (matches the AI_BATCH size, so
+        // everything the duplicates store emits in its first wave is ready).
+        // Scrolling past that grows in small increments.
+        initialNumToRender={25}
+        maxToRenderPerBatch={5}
+        windowSize={10}
         removeClippedSubviews
         ListHeaderComponent={<View style={{ height: insets.top + 83 }} />}
         ListFooterComponent={progress.loaded < progress.total && progress.total > 0 ? (
