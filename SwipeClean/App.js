@@ -21,7 +21,6 @@ import OnboardingScreenV2 from './src/screens/OnboardingScreenV2';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { showOnboardingRef } from './src/utils/onboardingRef';
 import { splashRef } from './src/utils/splashRef';
-import * as duplicatesStore from './src/utils/duplicatesStore';
 
 const Tab = createBottomTabNavigator();
 
@@ -107,11 +106,6 @@ export default function App() {
       NavigationBar.setVisibilityAsync('hidden');
       NavigationBar.setBehaviorAsync('overlay-swipe');
     }
-    // Fire the duplicate scan at root-mount time — before SwipeScreen even
-    // mounts. The scan runs on a native thread, so there's no JS-thread
-    // cost, and it can shave ~200ms off time-to-first-duplicate.
-    // startScan is idempotent, so it's safe if SwipeScreen later calls it too.
-    duplicatesStore.startScan();
     // Safety: never leave the user stuck on the splash if something goes
     // wrong (permission denied, empty library, native module error).
     const fallback = setTimeout(hideSplash, 6000);
