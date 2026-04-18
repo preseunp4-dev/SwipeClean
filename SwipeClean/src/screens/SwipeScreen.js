@@ -12,7 +12,7 @@ import MilestoneOverlay from '../components/MilestoneOverlay';
 import { t } from '../i18n';
 import { useColors } from '../context/ColorContext';
 import * as Sharing from 'expo-sharing';
-import { getAssetsPage, getLargestProxy, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
+import { getAssetsPage, getAssetsRandom, getLargestProxy, isAvailable as fileSizeModuleAvailable } from '../../modules/file-size-module';
 import { sw } from '../utils/scale';
 import { splashRef } from '../utils/splashRef';
 import * as duplicatesStore from '../utils/duplicatesStore';
@@ -293,7 +293,27 @@ export default function SwipeScreen() {
         return;
       }
 
-      // Cursor-based fetch for oldest/newest/photos/videos/all
+      // 'all' (random): re-run native random sampling with seen + existing
+      // IDs added to the exclude list, so we don't re-pick what's already
+      // on screen.
+      if (filter === 'all') {
+        if (!fileSizeModuleAvailable) return;
+        const excludeIds = [...seen, ...existing.map((a) => a.id)];
+        const raw = await getAssetsRandom([1, 2], TOPUP_SIZE, excludeIds);
+        if (!raw || raw.length === 0) return;
+        const prev = filterCacheRef.current.all || { assets: [], currentIndex: 0 };
+        filterCacheRef.current.all = {
+          assets: [...prev.assets, ...raw],
+          currentIndex: prev.currentIndex,
+        };
+        if (activeFilterRef.current === 'all') {
+          dispatch({ type: 'APPEND_ASSETS', payload: raw });
+        }
+        warmupCards(raw);
+        return;
+      }
+
+      // Cursor-based fetch for oldest/newest/photos/videos
       if (!fileSizeModuleAvailable) return; // Expo Go — no page fetch
 
       const mediaTypes =
@@ -303,10 +323,9 @@ export default function SwipeScreen() {
       const oldestFirst = filter !== 'newest';
 
       // Cursor = creationTime of the LAST asset in the current buffer,
-      // sorted by the filter's direction. For 'all' (random) we can't use
-      // a cursor meaningfully — fall back to no-cursor + shuffle.
+      // sorted by the filter's direction.
       let cursor = 0;
-      if (filter !== 'all' && existing.length > 0) {
+      if (existing.length > 0) {
         // For oldest/photos/videos (ASC), cursor = max creationTime seen
         // For newest (DESC), cursor = min creationTime seen
         const times = existing.map((a) => a.creationTime || 0);
@@ -330,12 +349,6 @@ export default function SwipeScreen() {
         cursor = lastTime;
       }
 
-      if (filter === 'all') {
-        for (let i = unseen.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [unseen[i], unseen[j]] = [unseen[j], unseen[i]];
-        }
-      }
       const newBatch = unseen.slice(0, TOPUP_SIZE);
       if (newBatch.length === 0) return;
       const prev = filterCacheRef.current[filter] || { assets: [], currentIndex: 0 };
@@ -356,18 +369,16 @@ export default function SwipeScreen() {
 
   // -----------------------------------------------------------------------
   // Phase 1 helper: fetch INITIAL_BATCH unseen assets for a single category.
-  // Uses our native getAssetsPage (fetchLimit-based, ~50ms on any library
-  // size) instead of MediaLibrary.getAssetsAsync (which sorts the whole
-  // library and hangs on 80K+ photos).
+  // Each filter uses a bounded native call — fast on any library size.
   //
   // Filters handled here:
-  //   oldest       native page, photos+videos, creationDate ASC
-  //   newest       native page, photos+videos, creationDate DESC
-  //   photos       native page, photos only, creationDate ASC
-  //   videos       native page, videos only, creationDate ASC
-  //   all          native page of recent, shuffled in JS
+  //   oldest       getAssetsPage (fetchLimit-based), photos+videos, ASC
+  //   newest       getAssetsPage, photos+videos, DESC
+  //   photos       getAssetsPage, photos only, ASC
+  //   videos       getAssetsPage, videos only, ASC
+  //   all          getAssetsRandom — weighted-random sampling across library
+  //   largest      getLargestProxy — proxy score + real fileSize for top K
   //   screenshots  album-based path (fetchScreenshots, unchanged)
-  //   largest      NOT handled here — filled after native cache builds
   //
   // Stores in filterCacheRef. If it's the active filter, also dispatches
   // SET_ASSETS so the UI updates the moment the category resolves.
@@ -392,15 +403,32 @@ export default function SwipeScreen() {
         }
         warmupCards(batch);
         return batch;
+      } else if (filter === 'all') {
+        // Random — true library-wide random via native weighted sampling.
+        // Previously this was the recursive getAssetsPage path with a JS
+        // Fisher-Yates shuffle, which only randomized within the OLDEST 100
+        // photos. Now we sample across the whole library in O(count) native
+        // picks regardless of library size.
+        if (!fileSizeModuleAvailable) return [];
+        const seen = Array.from(seenIdsRef.current);
+        const raw = await getAssetsRandom([1, 2], INITIAL_BATCH, seen);
+        batch = raw;
+        filterCacheRef.current.all = { assets: batch, currentIndex: 0 };
+        if (activeFilterRef.current === filter) {
+          dispatch({ type: 'SET_ASSETS', payload: batch });
+        }
+        warmupCards(batch);
+        return batch;
       } else {
         // Native-bridge fast path. Falls back to MediaLibrary only in Expo Go
         // where our native module isn't loaded.
+        // Here: filter is oldest / newest / photos / videos (all handled above).
         let unseen = [];
         if (fileSizeModuleAvailable) {
           const mediaTypes =
             filter === 'photos' ? [1] :
             filter === 'videos' ? [2] :
-            [1, 2]; // oldest, newest, all
+            [1, 2]; // oldest, newest
           const oldestFirst = filter !== 'newest';
 
           // Recursive pagination: if a heavy returning user has already swiped
@@ -444,13 +472,6 @@ export default function SwipeScreen() {
           unseen = r.assets.filter((a) => !seen.has(a.id));
         }
 
-        if (filter === 'all') {
-          // Fisher-Yates shuffle for random
-          for (let i = unseen.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [unseen[i], unseen[j]] = [unseen[j], unseen[i]];
-          }
-        }
         batch = unseen.slice(0, INITIAL_BATCH);
         filterCacheRef.current[filter] = { assets: batch, currentIndex: 0 };
       }

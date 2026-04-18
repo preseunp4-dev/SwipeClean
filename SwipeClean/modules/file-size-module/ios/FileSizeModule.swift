@@ -399,6 +399,84 @@ public class FileSizeModule: Module {
       return groups
     }
 
+    // --- NEW #3b: Truly random assets across the whole library ---
+    // Uses PHFetchResult's lazy O(1) object(at:) lookup so we never have to
+    // materialize all N assets. Picks random indices weighted by each media
+    // type's total count, filters out seenIds natively (saves bridge cost
+    // on big seen sets), returns a shuffled pool for JS to slice.
+    //
+    // Safe on any library size — no PHAssetResource calls, no image loads.
+    // Expected ~500-800ms on 80K.
+    AsyncFunction("getAssetsRandom") { (mediaTypes: [Int], count: Int, seenIds: [String]) -> [[String: Any]] in
+      let seenSet = Set(seenIds)
+
+      struct TypeInfo {
+        let fetchResult: PHFetchResult<PHAsset>
+        let total: Int
+      }
+
+      // Lazy query per media type — count is O(1), no materialization.
+      var types: [TypeInfo] = []
+      for mediaType in mediaTypes {
+        let type: PHAssetMediaType = mediaType == 1 ? .image : .video
+        let fr = PHAsset.fetchAssets(with: type, options: nil)
+        if fr.count > 0 {
+          types.append(TypeInfo(fetchResult: fr, total: fr.count))
+        }
+      }
+      let grandTotal = types.reduce(0) { $0 + $1.total }
+      if grandTotal == 0 { return [] }
+
+      // Over-fetch so JS has a pool to slice. count*4 handles edge cases
+      // where some picks end up being seen (filtered out here).
+      let targetTotal = max(count * 4, 50)
+
+      var candidates: [[String: Any]] = []
+      // Per-type "tried" set so we don't re-roll the same index repeatedly.
+      var tried: [Set<Int>] = types.map { _ in Set<Int>() }
+      var attempts = 0
+      // Bound attempts so heavily-swiped libraries don't spin forever.
+      let maxAttempts = min(grandTotal, targetTotal * 10)
+
+      while attempts < maxAttempts && candidates.count < targetTotal {
+        attempts += 1
+
+        // Weighted-random pick across media types, proportional to each
+        // type's count — gives a uniform sample across the whole library.
+        let pick = Int.random(in: 0..<grandTotal)
+        var typeIdx = 0
+        var acc = 0
+        for (i, t) in types.enumerated() {
+          acc += t.total
+          if pick < acc { typeIdx = i; break }
+        }
+        let t = types[typeIdx]
+
+        // Skip if we've already tried every index in this type.
+        if tried[typeIdx].count >= t.total { continue }
+        let idx = Int.random(in: 0..<t.total)
+        if !tried[typeIdx].insert(idx).inserted { continue }
+
+        let asset = t.fetchResult.object(at: idx)
+        if seenSet.contains(asset.localIdentifier) { continue }
+
+        candidates.append([
+          "id": asset.localIdentifier,
+          "mediaType": asset.mediaType == .image ? "photo" : "video",
+          "width": asset.pixelWidth,
+          "height": asset.pixelHeight,
+          "creationTime": (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000,
+          "duration": asset.duration,
+          "uri": "ph://\(asset.localIdentifier)"
+        ])
+      }
+
+      // Shuffle the combined pool (photos + videos) so JS slicing doesn't
+      // preserve any type-clustering from the sampling order.
+      candidates.shuffle()
+      return Array(candidates.prefix(count))
+    }
+
     // --- NEW #4: Largest unseen assets via proxy scoring (safe on huge libs) ---
     // Strategy:
     //   1. Fetch all asset metadata (no PHAssetResource — fast on any lib size)

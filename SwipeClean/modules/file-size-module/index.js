@@ -88,6 +88,22 @@ export function addDuplicateGroupListener(callback) {
 }
 
 /**
+ * Truly random unseen assets across the whole library.
+ * Uses PHFetchResult's lazy O(1) index lookup + weighted random across
+ * media types. Returns up to `count` shuffled unseen assets. Safe on
+ * any library size — no PHAssetResource calls, no image loads.
+ *
+ * @param mediaTypes [1]=photos, [2]=videos, [1,2]=both
+ * @param count number of items to return
+ * @param seenIds asset IDs to exclude (includes currently-loaded buffer
+ *   for topup, so we don't re-pick what's already shown)
+ */
+export async function getAssetsRandom(mediaTypes = [1, 2], count = 25, seenIds = []) {
+  if (!nativeModule || typeof nativeModule.getAssetsRandom !== 'function') return [];
+  return nativeModule.getAssetsRandom(mediaTypes, count, seenIds);
+}
+
+/**
  * Largest unseen assets via proxy scoring.
  * Fast on any library size — scans metadata in one pass, picks top K candidates
  * by proxy (width × height × duration), fetches real fileSize only for those,
