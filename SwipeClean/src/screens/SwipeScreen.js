@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, Linking, ScrollView, Dimensions, Animated, InteractionManager } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, Linking, ScrollView, Dimensions, Animated, InteractionManager, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
@@ -696,12 +696,32 @@ export default function SwipeScreen() {
 
   const containerStyle = [styles.container, { paddingTop: insets.top, backgroundColor: theme.bg }];
   const [permStatus, setPermStatus] = useState(null);
+  // Re-check permission whenever the app comes back to foreground.
+  // Without this: user goes to Settings, grants permission, returns to the
+  // app and still sees the "permission denied" screen until they fully
+  // restart. With this: state updates and (if newly granted) initialLoad
+  // re-runs to populate the photo library.
+  const permStatusRef = useRef(permStatus);
+  useEffect(() => { permStatusRef.current = permStatus; }, [permStatus]);
+
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+    const refresh = async () => {
       const { status } = await MediaLibrary.getPermissionsAsync();
+      if (!mounted) return;
+      const wasGranted = permStatusRef.current === 'granted';
       setPermStatus(status);
-    })();
-  }, []);
+      if (!wasGranted && status === 'granted') {
+        // Permission newly granted while we were running — kick off load.
+        initialLoad();
+      }
+    };
+    refresh(); // initial check on mount
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') refresh();
+    });
+    return () => { mounted = false; sub.remove(); };
+  }, [initialLoad]);
 
   const fileSizeTimerRef = useRef(null);
   const pendingFileSizes = useRef([]);

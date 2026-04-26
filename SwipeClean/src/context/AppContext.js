@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import {
   clearSeenIds,
@@ -328,6 +329,33 @@ export function AppProvider({ children }) {
     statsRef.current = cur;
     debouncedSave('stats', saveStats, { totalSpaceSaved: state.totalSpaceSaved, totalKept: state.totalKept, totalTrashed: state.totalTrashed, totalKeptSize: state.totalKeptSize });
   }, [state.totalSpaceSaved, state.totalKept, state.totalTrashed, state.totalKeptSize]);
+
+  // Flush pending debounced saves when the app goes to background. Without
+  // this, a swipe done <1s before the user backgrounds/kills the app is lost
+  // (debounce timer never fires). On 'inactive' OR 'background' we cancel
+  // any pending timers and write current state synchronously.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'background' && next !== 'inactive') return;
+      // Cancel pending debounces so they don't re-fire with stale data later
+      for (const key of Object.keys(saveTimers.current)) {
+        if (saveTimers.current[key]) {
+          clearTimeout(saveTimers.current[key]);
+          delete saveTimers.current[key];
+        }
+      }
+      // Force immediate writes from the latest values held in refs
+      saveTrashed(trashedRef.current);
+      saveKept(keptRef.current);
+      saveStats({
+        totalSpaceSaved: statsRef.current.s,
+        totalKept: statsRef.current.k,
+        totalTrashed: statsRef.current.t,
+        totalKeptSize: statsRef.current.ks,
+      });
+    });
+    return () => sub.remove();
+  }, []);
 
   const keep = useCallback(() => dispatch({ type: 'KEEP' }), []);
   const trash = useCallback(() => dispatch({ type: 'TRASH' }), []);

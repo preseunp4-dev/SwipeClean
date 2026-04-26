@@ -4,23 +4,46 @@ function getFile(name) {
   return new File(Paths.document, name);
 }
 
+// Atomic write strategy:
+//   1. Serialize JSON to a `.tmp` sibling file (original stays intact).
+//   2. Delete the original.
+//   3. Move .tmp → original.
+// The window between step 2 and step 3 is microseconds. If the app is killed
+// in that window, readJSON's recovery branch promotes the .tmp on next read.
 async function readJSON(name, fallback) {
   try {
     const file = getFile(name);
-    if (!file.exists) return fallback;
-    const raw = await file.text();
-    return JSON.parse(raw);
+    if (file.exists) {
+      const raw = await file.text();
+      return JSON.parse(raw);
+    }
+    // Recovery: main file missing. If a .tmp exists, a previous write was
+    // interrupted between delete and move — promote the .tmp to main.
+    const tmpFile = getFile(name + '.tmp');
+    if (tmpFile.exists) {
+      const raw = await tmpFile.text();
+      const parsed = JSON.parse(raw);
+      try { tmpFile.move(file); } catch {}
+      return parsed;
+    }
+    return fallback;
   } catch {
     return fallback;
   }
 }
 
 async function writeJSON(name, data) {
+  const finalFile = getFile(name);
+  const tmpFile = getFile(name + '.tmp');
   try {
-    const file = getFile(name);
-    await file.write(JSON.stringify(data));
+    // Clean any leftover tmp from a previous failed attempt.
+    if (tmpFile.exists) tmpFile.delete();
+    tmpFile.write(JSON.stringify(data));
+    if (finalFile.exists) finalFile.delete();
+    tmpFile.move(finalFile);
   } catch (e) {
     console.warn('Storage write failed:', name, e);
+    try { if (tmpFile.exists) tmpFile.delete(); } catch {}
   }
 }
 
